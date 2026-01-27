@@ -1,0 +1,341 @@
+// ShareIt Backend - Prisma Schema
+// Peer-to-Peer Neighborhood Sharing Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Category {
+  tools
+  outdoor_recreation
+  party_events
+  lawn_garden
+  vehicles_transport
+  workspace
+  specialized_equipment
+  services
+  other
+}
+
+enum ItemCondition {
+  new
+  excellent
+  good
+  fair
+  poor
+}
+
+enum PricingType {
+  free
+  hourly
+  daily
+  weekly
+  monthly
+}
+
+enum ProtectionPreference {
+  waiver_ok
+  insurance_required
+  deposit_required
+  let_me_decide
+}
+
+enum RequestStatus {
+  open
+  matched
+  accepted
+  cancelled
+  expired
+}
+
+enum MatchResponse {
+  pending
+  accepted
+  declined
+  ignored
+}
+
+enum TransactionStatus {
+  requested
+  accepted
+  pickup_confirmed
+  active
+  return_initiated
+  return_confirmed
+  completed
+  disputed
+  cancelled
+}
+
+enum ProtectionType {
+  waiver
+  insurance
+  deposit
+}
+
+enum PaymentStatus {
+  pending
+  authorized
+  captured
+  refunded
+  partial_refund
+}
+
+enum PhotoType {
+  pickup_full_view
+  pickup_damage
+  pickup_serial
+  return_full_view
+  return_damage
+  return_serial
+}
+
+enum RatingRole {
+  lender
+  borrower
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+/// Users - Both lenders and borrowers (same user, different contexts)
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  email           String   @unique
+  passwordHash    String   @map("password_hash")
+  fullName        String   @map("full_name")
+  phoneNumber     String?  @unique @map("phone_number")
+  profilePhotoUrl String?  @map("profile_photo_url")
+  address         String?
+  latitude        Decimal? @db.Decimal(10, 8)
+  longitude       Decimal? @db.Decimal(11, 8)
+  neighborhood    String?
+  isVerified      Boolean  @default(false) @map("is_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  items                  Item[]
+  requests               Request[]
+  borrowerTransactions   Transaction[]  @relation("BorrowerTransactions")
+  lenderTransactions     Transaction[]  @relation("LenderTransactions")
+  uploadedPhotos         Photo[]
+  sentMessages           Message[]      @relation("SentMessages")
+  receivedMessages       Message[]      @relation("ReceivedMessages")
+  ratingsGiven           Rating[]       @relation("RatingsGiven")
+  ratingsReceived        Rating[]       @relation("RatingsReceived")
+
+  @@index([latitude, longitude], name: "idx_user_location")
+  @@index([neighborhood], name: "idx_user_neighborhood")
+  @@map("users")
+}
+
+/// Items - Things users lend/rent (tools, equipment, services, workspace, vehicles, etc.)
+model Item {
+  id                   String               @id @default(uuid()) @db.Uuid
+  ownerId              String               @map("owner_id") @db.Uuid
+  category             Category
+  subcategory          String?
+  title                String
+  description          String?              @db.Text
+  condition            ItemCondition
+  replacementValue     Decimal              @map("replacement_value") @db.Decimal(10, 2)
+  pricingType          PricingType          @map("pricing_type")
+  priceAmount          Decimal?             @map("price_amount") @db.Decimal(10, 2)
+  lateFeeAmount        Decimal?             @map("late_fee_amount") @db.Decimal(10, 2)
+  protectionPreference ProtectionPreference @map("protection_preference")
+  depositPercentage    Int                  @default(0) @map("deposit_percentage")
+  isAvailable          Boolean              @default(true) @map("is_available")
+  photoUrls            Json                 @default("[]") @map("photo_urls")
+  specialInstructions  String?              @map("special_instructions") @db.Text
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  matches      Match[]
+  transactions Transaction[]
+
+  @@index([ownerId], name: "idx_item_owner")
+  @@index([category], name: "idx_item_category")
+  @@index([isAvailable], name: "idx_item_available")
+  @@index([ownerId, isAvailable], name: "idx_item_owner_available")
+  @@map("items")
+}
+
+/// Requests - Borrower posts what they need (the core differentiator)
+model Request {
+  id              String        @id @default(uuid()) @db.Uuid
+  requesterId     String        @map("requester_id") @db.Uuid
+  category        Category
+  title           String
+  description     String?       @db.Text
+  neededFrom      DateTime      @map("needed_from")
+  neededUntil     DateTime      @map("needed_until")
+  maxBudget       Decimal?      @map("max_budget") @db.Decimal(10, 2)
+  maxDistanceMiles Decimal      @default(10) @map("max_distance_miles") @db.Decimal(5, 2)
+  latitude        Decimal       @db.Decimal(10, 8)
+  longitude       Decimal       @db.Decimal(11, 8)
+  status          RequestStatus @default(open)
+  expiresAt       DateTime      @map("expires_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  requester    User          @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  matches      Match[]
+  transactions Transaction[]
+
+  @@index([requesterId], name: "idx_request_requester")
+  @@index([status], name: "idx_request_status")
+  @@index([category], name: "idx_request_category")
+  @@index([expiresAt], name: "idx_request_expires")
+  @@index([latitude, longitude, status], name: "idx_request_location_status")
+  @@map("requests")
+}
+
+/// Matches - Links requests to items that could fulfill them (many-to-many)
+model Match {
+  id              String        @id @default(uuid()) @db.Uuid
+  requestId       String        @map("request_id") @db.Uuid
+  itemId          String        @map("item_id") @db.Uuid
+  distanceMiles   Decimal       @map("distance_miles") @db.Decimal(6, 2)
+  matchScore      Int           @map("match_score")
+  lenderNotified  Boolean       @default(false) @map("lender_notified")
+  lenderResponse  MatchResponse @default(pending) @map("lender_response")
+  respondedAt     DateTime?     @map("responded_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([requestId], name: "idx_match_request")
+  @@index([itemId], name: "idx_match_item")
+  @@index([lenderResponse], name: "idx_match_response")
+  @@map("matches")
+}
+
+/// Transactions - The actual rental agreement between borrower and lender
+model Transaction {
+  id               String            @id @default(uuid()) @db.Uuid
+  requestId        String?           @map("request_id") @db.Uuid
+  itemId           String            @map("item_id") @db.Uuid
+  borrowerId       String            @map("borrower_id") @db.Uuid
+  lenderId         String            @map("lender_id") @db.Uuid
+  status           TransactionStatus @default(requested)
+  pickupTime       DateTime          @map("pickup_time")
+  returnTime       DateTime          @map("return_time")
+  actualPickupTime DateTime?         @map("actual_pickup_time")
+  actualReturnTime DateTime?         @map("actual_return_time")
+  rentalFee        Decimal           @map("rental_fee") @db.Decimal(10, 2)
+  platformFee      Decimal           @map("platform_fee") @db.Decimal(10, 2)
+  protectionType   ProtectionType    @map("protection_type")
+  depositAmount    Decimal?          @map("deposit_amount") @db.Decimal(10, 2)
+  insuranceFee     Decimal?          @map("insurance_fee") @db.Decimal(10, 2)
+  totalCharged     Decimal           @map("total_charged") @db.Decimal(10, 2)
+  lateFeeCharged   Decimal?          @map("late_fee_charged") @db.Decimal(10, 2)
+  paymentStatus    PaymentStatus     @default(pending) @map("payment_status")
+  paymentIntentId  String?           @map("payment_intent_id")
+  disputeReason    String?           @map("dispute_reason") @db.Text
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  request  Request?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  item     Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  borrower User      @relation("BorrowerTransactions", fields: [borrowerId], references: [id], onDelete: Restrict)
+  lender   User      @relation("LenderTransactions", fields: [lenderId], references: [id], onDelete: Restrict)
+  photos   Photo[]
+  messages Message[]
+  ratings  Rating[]
+
+  @@index([borrowerId], name: "idx_transaction_borrower")
+  @@index([lenderId], name: "idx_transaction_lender")
+  @@index([itemId], name: "idx_transaction_item")
+  @@index([status], name: "idx_transaction_status")
+  @@index([pickupTime], name: "idx_transaction_pickup")
+  @@index([status, createdAt], name: "idx_transaction_status_created")
+  @@index([borrowerId, status], name: "idx_transaction_borrower_status")
+  @@index([lenderId, status], name: "idx_transaction_lender_status")
+  @@map("transactions")
+}
+
+/// Photos - Metadata for pickup/return verification photos
+model Photo {
+  id            String    @id @default(uuid()) @db.Uuid
+  transactionId String    @map("transaction_id") @db.Uuid
+  uploadedBy    String    @map("uploaded_by") @db.Uuid
+  photoType     PhotoType @map("photo_type")
+  fileUrl       String    @map("file_url")
+  metadata      Json      @default("{}") // GPS coordinates, timestamp, device info
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  uploader    User        @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([transactionId], name: "idx_photo_transaction")
+  @@index([photoType], name: "idx_photo_type")
+  @@map("photos")
+}
+
+/// Messages - Transaction-specific chat between borrower and lender
+model Message {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  senderId      String   @map("sender_id") @db.Uuid
+  recipientId   String   @map("recipient_id") @db.Uuid
+  messageText   String   @map("message_text") @db.Text
+  photoUrl      String?  @map("photo_url")
+  isRead        Boolean  @default(false) @map("is_read")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  sender      User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User        @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId], name: "idx_message_transaction")
+  @@index([senderId], name: "idx_message_sender")
+  @@index([recipientId], name: "idx_message_recipient")
+  @@index([createdAt], name: "idx_message_created")
+  @@map("messages")
+}
+
+/// Ratings - Dual ratings - both parties rate each other after transaction
+model Rating {
+  id                  String     @id @default(uuid()) @db.Uuid
+  transactionId       String     @map("transaction_id") @db.Uuid
+  raterId             String     @map("rater_id") @db.Uuid
+  ratedUserId         String     @map("rated_user_id") @db.Uuid
+  role                RatingRole // Context: was the rated user acting as lender or borrower
+  overallRating       Int        @map("overall_rating") // 1-5 stars
+  onTimeRating        Int?       @map("on_time_rating") // 1-5
+  communicationRating Int?       @map("communication_rating") // 1-5
+  conditionRating     Int?       @map("condition_rating") // 1-5, for borrowers
+  itemAsDescribedRating Int?     @map("item_as_described_rating") // 1-5, for lenders
+  reviewText          String?    @map("review_text") @db.Text
+  wouldTransactAgain  Boolean    @map("would_transact_again")
+  createdAt           DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  rater       User        @relation("RatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
+  ratedUser   User        @relation("RatingsReceived", fields: [ratedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, raterId], name: "unique_rating_per_transaction_per_rater")
+  @@index([transactionId], name: "idx_rating_transaction")
+  @@index([ratedUserId], name: "idx_rating_rated_user")
+  @@map("ratings")
+}
