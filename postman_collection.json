@@ -1,0 +1,766 @@
+{
+  "info": {
+    "name": "Good Neighbors API",
+    "description": "Peer-to-Peer Neighborhood Sharing Platform API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/register",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"New User\",\n  \"phoneNumber\": \"9705559999\",\n  \"address\": \"100 Test St, Fort Collins, CO\",\n  \"latitude\": 40.5700,\n  \"longitude\": -105.0800,\n  \"neighborhood\": \"Downtown\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set('token', jsonData.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/me",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Update Current User",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/users/me",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Alice Johnson Updated\",\n  \"neighborhood\": \"Old Town North\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/:id",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get User Ratings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:id/ratings?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":id", "ratings"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Items",
+      "item": [
+        {
+          "name": "Create Item",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/items",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"tools\",\n  \"subcategory\": \"power_tools\",\n  \"title\": \"Circular Saw\",\n  \"description\": \"7.25 inch circular saw, great for cutting lumber\",\n  \"condition\": \"good\",\n  \"replacementValue\": 120,\n  \"pricingType\": \"daily\",\n  \"priceAmount\": 20,\n  \"lateFeeAmount\": 15,\n  \"protectionPreference\": \"deposit_required\",\n  \"depositPercentage\": 50,\n  \"photoUrls\": [\"https://example.com/saw1.jpg\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get All Items",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/items?category=tools&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "items"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "tools"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Items Near Location",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/items?latitude=40.5853&longitude=-105.0844&radiusMiles=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "items"],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "40.5853"
+                },
+                {
+                  "key": "longitude",
+                  "value": "-105.0844"
+                },
+                {
+                  "key": "radiusMiles",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Listings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items/my-listings",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get Item by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items/:id"
+          }
+        },
+        {
+          "name": "Update Item",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/items/:id",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceAmount\": 25,\n  \"description\": \"Updated description\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Item",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/items/:id",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Requests",
+      "item": [
+        {
+          "name": "Create Request",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/requests",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"lawn_garden\",\n  \"title\": \"Need a pressure washer this weekend\",\n  \"description\": \"Want to clean my deck before a party\",\n  \"neededFrom\": \"2024-02-01T09:00:00Z\",\n  \"neededUntil\": \"2024-02-02T18:00:00Z\",\n  \"maxBudget\": 50,\n  \"maxDistanceMiles\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Get My Requests",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/requests/my-requests",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get Request by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/requests/:id",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get Request Matches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/requests/:id/matches",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Cancel Request",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/requests/:id/cancel",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Matches",
+      "item": [
+        {
+          "name": "Get Incoming Matches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/matches/incoming?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "matches", "incoming"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Accept Match",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/matches/:id/respond",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"response\": \"accepted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Decline Match",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/matches/:id/respond",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"response\": \"declined\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Create Transaction (from Match)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/transactions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matchId\": \"MATCH_UUID_HERE\",\n  \"pickupTime\": \"2024-02-01T10:00:00Z\",\n  \"returnTime\": \"2024-02-02T18:00:00Z\",\n  \"protectionType\": \"deposit\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Transaction (Direct)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/transactions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"ITEM_UUID_HERE\",\n  \"pickupTime\": \"2024-02-01T10:00:00Z\",\n  \"returnTime\": \"2024-02-02T18:00:00Z\",\n  \"protectionType\": \"waiver\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get My Transactions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/my-transactions?role=borrower",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions", "my-transactions"],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "borrower"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/transactions/:id",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Accept Transaction (Lender)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm Pickup",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"pickup_confirmed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark Active",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Initiate Return",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"return_initiated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm Return",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"return_confirmed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Complete Transaction",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Dispute Transaction",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/transactions/:id/dispute",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disputeReason\": \"Item was damaged when I received it\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/transactions/:id/messages",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageText\": \"Hi! What time works for pickup?\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/transactions/:id/messages",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/messages/unread-count",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ratings",
+      "item": [
+        {
+          "name": "Submit Rating",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/transactions/:id/rating",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"overallRating\": 5,\n  \"onTimeRating\": 5,\n  \"communicationRating\": 5,\n  \"itemAsDescribedRating\": 5,\n  \"reviewText\": \"Great experience! Item was exactly as described.\",\n  \"wouldTransactAgain\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Transaction Ratings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/transactions/:id/ratings",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    }
+  ]
+}

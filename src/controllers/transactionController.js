@@ -1,0 +1,331 @@
+const prisma = require('../config/database');
+
+// Valid state transitions
+const VALID_TRANSITIONS = {
+  requested: ['accepted', 'cancelled'],
+  accepted: ['pickup_confirmed', 'cancelled', 'disputed'],
+  pickup_confirmed: ['active', 'cancelled', 'disputed'],
+  active: ['return_initiated', 'disputed'],
+  return_initiated: ['return_confirmed', 'disputed'],
+  return_confirmed: ['completed', 'disputed'],
+  completed: [],
+  disputed: ['completed', 'cancelled'],
+  cancelled: [],
+};
+
+/**
+ * Create a transaction from an accepted match
+ * POST /api/transactions
+ */
+async function createTransaction(req, res) {
+  const {
+    matchId,
+    itemId,
+    pickupTime,
+    returnTime,
+    protectionType,
+  } = req.body;
+
+  let match = null;
+  let item = null;
+
+  // If matchId provided, get match and verify it's accepted
+  if (matchId) {
+    match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        item: { include: { owner: true } },
+        request: true,
+      },
+    });
+
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    if (match.lenderResponse !== 'accepted') {
+      return res.status(400).json({ error: 'Match has not been accepted by the lender' });
+    }
+
+    if (match.request.requesterId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to create transaction for this match' });
+    }
+
+    item = match.item;
+  } else if (itemId) {
+    // Direct transaction without a match (browse-based)
+    item = await prisma.item.findUnique({
+      where: { id: itemId },
+      include: { owner: true },
+    });
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    if (!item.isAvailable) {
+      return res.status(400).json({ error: 'Item is not available' });
+    }
+
+    if (item.ownerId === req.user.id) {
+      return res.status(400).json({ error: 'Cannot rent your own item' });
+    }
+  } else {
+    return res.status(400).json({ error: 'Either matchId or itemId is required' });
+  }
+
+  // Calculate fees
+  const pickup = new Date(pickupTime);
+  const returnDate = new Date(returnTime);
+  const durationDays = Math.ceil((returnDate - pickup) / (1000 * 60 * 60 * 24));
+
+  let rentalFee = 0;
+  if (item.pricingType === 'daily' && item.priceAmount) {
+    rentalFee = parseFloat(item.priceAmount) * durationDays;
+  } else if (item.pricingType === 'hourly' && item.priceAmount) {
+    const durationHours = Math.ceil((returnDate - pickup) / (1000 * 60 * 60));
+    rentalFee = parseFloat(item.priceAmount) * durationHours;
+  } else if (item.pricingType === 'weekly' && item.priceAmount) {
+    const durationWeeks = Math.ceil(durationDays / 7);
+    rentalFee = parseFloat(item.priceAmount) * durationWeeks;
+  } else if (item.pricingType === 'monthly' && item.priceAmount) {
+    const durationMonths = Math.ceil(durationDays / 30);
+    rentalFee = parseFloat(item.priceAmount) * durationMonths;
+  }
+
+  // Platform fee: $1 + 3% of rental fee
+  const platformFee = 1 + (rentalFee * 0.03);
+
+  // Calculate protection costs
+  let depositAmount = null;
+  let insuranceFee = null;
+
+  if (protectionType === 'deposit') {
+    depositAmount = parseFloat(item.replacementValue) * (item.depositPercentage / 100);
+  } else if (protectionType === 'insurance') {
+    // Insurance fee: 5% of replacement value
+    insuranceFee = parseFloat(item.replacementValue) * 0.05;
+  }
+
+  // Total charged
+  const totalCharged = rentalFee + platformFee + (insuranceFee || 0) + (depositAmount || 0);
+
+  const transaction = await prisma.transaction.create({
+    data: {
+      requestId: match?.requestId || null,
+      itemId: item.id,
+      borrowerId: req.user.id,
+      lenderId: item.ownerId,
+      pickupTime: pickup,
+      returnTime: returnDate,
+      rentalFee,
+      platformFee,
+      protectionType,
+      depositAmount,
+      insuranceFee,
+      totalCharged,
+    },
+    include: {
+      item: true,
+      borrower: {
+        select: { id: true, fullName: true, phoneNumber: true },
+      },
+      lender: {
+        select: { id: true, fullName: true, phoneNumber: true },
+      },
+    },
+  });
+
+  res.status(201).json(transaction);
+}
+
+/**
+ * Get transaction details
+ * GET /api/transactions/:id
+ */
+async function getTransaction(req, res) {
+  const { id } = req.params;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: true,
+      borrower: {
+        select: { id: true, fullName: true, phoneNumber: true, profilePhotoUrl: true },
+      },
+      lender: {
+        select: { id: true, fullName: true, phoneNumber: true, profilePhotoUrl: true },
+      },
+      photos: true,
+      ratings: true,
+      request: true,
+    },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  // Only borrower or lender can view transaction details
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to view this transaction' });
+  }
+
+  res.json(transaction);
+}
+
+/**
+ * Get current user's transactions
+ * GET /api/transactions/my-transactions
+ */
+async function getMyTransactions(req, res) {
+  const { role, status, limit = 20, offset = 0 } = req.query;
+
+  const where = {
+    OR: [
+      { borrowerId: req.user.id },
+      { lenderId: req.user.id },
+    ],
+  };
+
+  // Filter by role
+  if (role === 'borrower') {
+    delete where.OR;
+    where.borrowerId = req.user.id;
+  } else if (role === 'lender') {
+    delete where.OR;
+    where.lenderId = req.user.id;
+  }
+
+  if (status) {
+    where.status = status;
+  }
+
+  const [transactions, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: {
+        item: {
+          select: { id: true, title: true, photoUrls: true },
+        },
+        borrower: {
+          select: { id: true, fullName: true, profilePhotoUrl: true },
+        },
+        lender: {
+          select: { id: true, fullName: true, profilePhotoUrl: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit),
+      skip: parseInt(offset),
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  res.json({
+    transactions,
+    pagination: {
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    },
+  });
+}
+
+/**
+ * Update transaction status
+ * PUT /api/transactions/:id/status
+ */
+async function updateTransactionStatus(req, res) {
+  const { id } = req.params;
+  const { status, disputeReason } = req.body;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: { item: true },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  // Only borrower or lender can update
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to update this transaction' });
+  }
+
+  // Validate state transition
+  const validNextStates = VALID_TRANSITIONS[transaction.status];
+  if (!validNextStates.includes(status)) {
+    return res.status(400).json({
+      error: `Cannot transition from "${transaction.status}" to "${status}"`,
+      validTransitions: validNextStates,
+    });
+  }
+
+  // Status-specific validations
+  if (status === 'accepted' && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the lender can accept the transaction' });
+  }
+
+  if (status === 'disputed' && !disputeReason) {
+    return res.status(400).json({ error: 'Dispute reason is required' });
+  }
+
+  // Build update data
+  const updateData = { status };
+
+  if (status === 'pickup_confirmed') {
+    updateData.actualPickupTime = new Date();
+  }
+
+  if (status === 'return_confirmed' || status === 'completed') {
+    updateData.actualReturnTime = new Date();
+  }
+
+  if (status === 'disputed') {
+    updateData.disputeReason = disputeReason;
+  }
+
+  // Calculate late fee if returning late
+  if (status === 'return_confirmed' || status === 'completed') {
+    const now = new Date();
+    if (now > transaction.returnTime && transaction.item.lateFeeAmount) {
+      const daysLate = Math.ceil((now - transaction.returnTime) / (1000 * 60 * 60 * 24));
+      updateData.lateFeeCharged = parseFloat(transaction.item.lateFeeAmount) * daysLate;
+    }
+  }
+
+  const updatedTransaction = await prisma.transaction.update({
+    where: { id },
+    data: updateData,
+    include: {
+      item: true,
+      borrower: {
+        select: { id: true, fullName: true },
+      },
+      lender: {
+        select: { id: true, fullName: true },
+      },
+    },
+  });
+
+  res.json(updatedTransaction);
+}
+
+/**
+ * Flag a dispute
+ * PUT /api/transactions/:id/dispute
+ */
+async function disputeTransaction(req, res) {
+  req.body.status = 'disputed';
+  return updateTransactionStatus(req, res);
+}
+
+module.exports = {
+  createTransaction,
+  getTransaction,
+  getMyTransactions,
+  updateTransactionStatus,
+  disputeTransaction,
+};
