@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { errorHandler } = require('./middleware/errorHandler');
+const { startScheduler } = require('./services/schedulerService');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -12,6 +13,8 @@ const requestRoutes = require('./routes/requestRoutes');
 const matchRoutes = require('./routes/matchRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const insightsRoutes = require('./routes/insightsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +36,8 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/insights', insightsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -46,6 +51,9 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`Good Neighbors API running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Start the scheduler for automatic status transitions and reminders
+  startScheduler();
 });
 
 module.exports = app;
