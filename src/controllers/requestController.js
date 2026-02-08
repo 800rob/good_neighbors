@@ -317,9 +317,10 @@ async function browseRequests(req, res) {
             lastName: true,
             neighborhood: true,
             isVerified: true,
-            averageRating: true,
-            totalRatings: true,
             profilePhotoUrl: true,
+            ratingsReceived: {
+              select: { overallRating: true },
+            },
           },
         },
         _count: { select: { matches: true } },
@@ -352,8 +353,25 @@ async function browseRequests(req, res) {
       });
   }
 
+  // Compute averageRating / totalRatings from ratingsReceived
+  const enrichedResults = resultsWithDistance.map((r) => {
+    const ratings = r.requester?.ratingsReceived || [];
+    const avgRating = ratings.length > 0
+      ? parseFloat((ratings.reduce((sum, rt) => sum + rt.overallRating, 0) / ratings.length).toFixed(2))
+      : null;
+    return {
+      ...r,
+      requester: {
+        ...r.requester,
+        averageRating: avgRating,
+        totalRatings: ratings.length,
+        ratingsReceived: undefined,
+      },
+    };
+  });
+
   res.json({
-    requests: resultsWithDistance,
+    requests: enrichedResults,
     pagination: {
       total,
       limit: parseInt(limit),
