@@ -20,7 +20,9 @@ router.put(
   '/me',
   authenticate,
   [
-    body('fullName').optional().trim().notEmpty().withMessage('Full name cannot be empty'),
+    body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
+    body('middleName').optional().trim(),
+    body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
     body('phoneNumber').optional().isMobilePhone().withMessage('Invalid phone number'),
     body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
     body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),

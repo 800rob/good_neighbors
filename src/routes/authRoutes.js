@@ -15,8 +15,18 @@ router.post(
     body('password')
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters'),
-    body('fullName').trim().notEmpty().withMessage('Full name is required'),
-    body('phoneNumber').optional().isMobilePhone().withMessage('Invalid phone number'),
+    body('firstName').trim().notEmpty().withMessage('First name is required'),
+    body('lastName').trim().notEmpty().withMessage('Last name is required'),
+    body('middleName').optional().trim(),
+    body('phoneNumber')
+      .optional({ values: 'falsy' })
+      .custom((value) => {
+        const digits = value.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 15) {
+          throw new Error('Phone number must be 10-15 digits');
+        }
+        return true;
+      }),
     body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
     body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
   ],

@@ -10,7 +10,27 @@ const SALT_ROUNDS = 10;
  * POST /api/auth/register
  */
 async function register(req, res) {
-  const { email, password, fullName, phoneNumber, address, latitude, longitude, neighborhood } = req.body;
+  const {
+    email,
+    password,
+    firstName,
+    middleName,
+    lastName,
+    phoneNumber,
+    address,
+    address2,
+    city,
+    state,
+    zipCode,
+    latitude,
+    longitude,
+    neighborhood
+  } = req.body;
+
+  // Validate required name fields
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'First name and last name are required' });
+  }
 
   // Check if email already exists
   const existingUser = await prisma.user.findUnique({
@@ -40,9 +60,15 @@ async function register(req, res) {
     data: {
       email,
       passwordHash,
-      fullName,
+      firstName,
+      middleName: middleName || null,
+      lastName,
       phoneNumber,
       address,
+      address2,
+      city,
+      state,
+      zipCode,
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       neighborhood,
@@ -54,14 +80,25 @@ async function register(req, res) {
     expiresIn: jwtConfig.expiresIn,
   });
 
+  // Build full name for display
+  const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
+
   res.status(201).json({
     message: 'User registered successfully',
     token,
     user: {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
+      firstName: user.firstName,
+      middleName: user.middleName,
+      lastName: user.lastName,
+      fullName,
       phoneNumber: user.phoneNumber,
+      address: user.address,
+      address2: user.address2,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
       neighborhood: user.neighborhood,
     },
   });
@@ -95,15 +132,28 @@ async function login(req, res) {
     expiresIn: jwtConfig.expiresIn,
   });
 
+  // Build full name for display
+  const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
+
   res.json({
     message: 'Login successful',
     token,
     user: {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
+      firstName: user.firstName,
+      middleName: user.middleName,
+      lastName: user.lastName,
+      fullName,
       phoneNumber: user.phoneNumber,
+      address: user.address,
+      address2: user.address2,
+      city: user.city,
+      state: user.state,
+      zipCode: user.zipCode,
       neighborhood: user.neighborhood,
+      latitude: user.latitude,
+      longitude: user.longitude,
     },
   });
 }

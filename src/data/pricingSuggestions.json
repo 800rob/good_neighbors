@@ -1,0 +1,349 @@
+{
+  "items": {
+    "Tools": {
+      "Power Tools": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Drill (Corded)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Drill (Cordless)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Impact Driver": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Circular Saw": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Miter Saw": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Table Saw": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Jigsaw": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Reciprocating Saw": { "hourly": 5, "daily": 18, "weekly": 55, "monthly": 140 },
+        "Angle Grinder": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Orbital Sander": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Belt Sander": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Nail Gun": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Staple Gun": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Rotary Tool": { "hourly": 3, "daily": 10, "weekly": 35, "monthly": 80 },
+        "Oscillating Multi-Tool": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 }
+      },
+      "Hand Tools": {
+        "default": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Hammer": { "hourly": 1, "daily": 3, "weekly": 10, "monthly": 25 },
+        "Screwdriver Set": { "hourly": 1, "daily": 4, "weekly": 12, "monthly": 30 },
+        "Wrench Set": { "hourly": 2, "daily": 6, "weekly": 20, "monthly": 50 },
+        "Socket Set": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Pliers Set": { "hourly": 1, "daily": 4, "weekly": 12, "monthly": 30 },
+        "Level": { "hourly": 1, "daily": 3, "weekly": 10, "monthly": 25 },
+        "Clamps": { "hourly": 2, "daily": 6, "weekly": 20, "monthly": 50 },
+        "Vice": { "hourly": 3, "daily": 10, "weekly": 30, "monthly": 75 }
+      },
+      "Ladders & Scaffolding": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Step Ladder (4-6 ft)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Step Ladder (8-10 ft)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Extension Ladder (16-20 ft)": { "hourly": 5, "daily": 18, "weekly": 55, "monthly": 140 },
+        "Extension Ladder (24-32 ft)": { "hourly": 7, "daily": 25, "weekly": 80, "monthly": 200 },
+        "A-Frame Ladder": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Scaffolding Set": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Work Platform": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Measuring & Layout": {
+        "default": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Laser Level": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Transit Level": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 }
+      },
+      "Specialty Tools": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Tile Cutter": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Pipe Wrench": { "hourly": 2, "daily": 6, "weekly": 20, "monthly": 50 },
+        "Bolt Cutters": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Post Hole Digger": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      }
+    },
+    "Outdoor & Recreation": {
+      "Camping": {
+        "default": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Tent (2-Person)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Tent (4-Person)": { "hourly": 4, "daily": 18, "weekly": 55, "monthly": 140 },
+        "Tent (6+ Person)": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Sleeping Bag (Summer)": { "hourly": 1, "daily": 5, "weekly": 15, "monthly": 40 },
+        "Sleeping Bag (Winter)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Camp Stove": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Cooler (Small, <25 qt)": { "hourly": 1, "daily": 5, "weekly": 15, "monthly": 40 },
+        "Cooler (Medium, 25-50 qt)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Cooler (Large, 50+ qt)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Water Sports": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Kayak (Recreational)": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Kayak (Fishing)": { "hourly": 10, "daily": 40, "weekly": 130, "monthly": 320 },
+        "Canoe": { "hourly": 10, "daily": 40, "weekly": 130, "monthly": 320 },
+        "Paddleboard (SUP)": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Life Jackets": { "hourly": 1, "daily": 5, "weekly": 15, "monthly": 40 }
+      },
+      "Winter Sports": {
+        "default": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Alpine Skis": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Ski Boots (Alpine)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Snowboard": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Snowboard Boots": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Snowshoes": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Cycling": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Mountain Bike": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Road Bike": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Hybrid Bike": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Kids Bike": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Bike Trailer (Child)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Bike Rack (Car)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Climbing & Hiking": {
+        "default": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Fishing": {
+        "default": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Fish Finder": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 }
+      }
+    },
+    "Party & Events": {
+      "Tables & Seating": {
+        "default": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Folding Tables (6 ft)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Folding Tables (8 ft)": { "hourly": 3, "daily": 10, "weekly": 30, "monthly": 75 },
+        "Round Tables (60 in)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Folding Chairs": { "hourly": 0.5, "daily": 2, "weekly": 6, "monthly": 15 },
+        "Banquet Chairs": { "hourly": 1, "daily": 3, "weekly": 10, "monthly": 25 }
+      },
+      "Tents & Canopies": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Pop-Up Canopy (10x10)": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Pop-Up Canopy (10x20)": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Party Tent (20x20)": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Party Tent (20x30+)": { "hourly": 20, "daily": 80, "weekly": 240, "monthly": 600 }
+      },
+      "Cooking Equipment": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Grill (Charcoal)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Grill (Propane)": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Smoker": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 }
+      },
+      "Entertainment": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Projector & Screen": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Sound System/Speakers": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Bounce House": { "hourly": 15, "daily": 75, "weekly": 200, "monthly": 500 },
+        "Games (Cornhole)": { "hourly": 2, "daily": 10, "weekly": 30, "monthly": 75 },
+        "Games (Giant Jenga)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Serving & Dinnerware": {
+        "default": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 }
+      }
+    },
+    "Lawn & Garden": {
+      "Mowing": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Push Mower (Gas)": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Push Mower (Electric)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Riding Mower": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Zero-Turn Mower": { "hourly": 20, "daily": 80, "weekly": 240, "monthly": 600 },
+        "Reel Mower": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 }
+      },
+      "Trimming & Edging": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "String Trimmer (Gas)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "String Trimmer (Electric)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Hedge Trimmer": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Chainsaw (Small, <16 in)": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Chainsaw (Large, 16+ in)": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 }
+      },
+      "Leaf & Debris": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Leaf Blower (Gas)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Leaf Blower (Electric)": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Soil & Planting": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Tiller/Cultivator": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Aerator (Power)": { "hourly": 10, "daily": 45, "weekly": 140, "monthly": 350 },
+        "Wheelbarrow": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 }
+      },
+      "Tree & Stump": {
+        "default": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Stump Grinder": { "hourly": 25, "daily": 100, "weekly": 300, "monthly": 750 },
+        "Log Splitter": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Wood Chipper": { "hourly": 20, "daily": 80, "weekly": 240, "monthly": 600 }
+      },
+      "Snow Removal": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Snowblower (Single-Stage)": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Snowblower (Two-Stage)": { "hourly": 12, "daily": 50, "weekly": 150, "monthly": 380 },
+        "Snow Shovel": { "hourly": 1, "daily": 3, "weekly": 10, "monthly": 25 }
+      }
+    },
+    "Vehicles & Transport": {
+      "Trucks & Trailers": {
+        "default": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Pickup Truck": { "hourly": 20, "daily": 80, "weekly": 280, "monthly": 700 },
+        "Cargo Van": { "hourly": 25, "daily": 100, "weekly": 350, "monthly": 900 },
+        "Box Truck": { "hourly": 30, "daily": 120, "weekly": 420, "monthly": 1050 },
+        "Utility Trailer (4x8)": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Utility Trailer (5x10)": { "hourly": 10, "daily": 45, "weekly": 140, "monthly": 350 },
+        "Utility Trailer (6x12+)": { "hourly": 12, "daily": 55, "weekly": 170, "monthly": 420 },
+        "Enclosed Trailer": { "hourly": 15, "daily": 65, "weekly": 200, "monthly": 500 },
+        "Car Trailer": { "hourly": 15, "daily": 65, "weekly": 200, "monthly": 500 }
+      },
+      "Moving Equipment": {
+        "default": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Dolly (Hand Truck)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Furniture Dolly (4-Wheel)": { "hourly": 2, "daily": 8, "weekly": 25, "monthly": 60 },
+        "Appliance Dolly": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Moving Blankets": { "hourly": 1, "daily": 5, "weekly": 15, "monthly": 40 }
+      },
+      "Car Accessories": {
+        "default": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Bike Rack (Hitch)": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Cargo Box (Roof)": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 }
+      }
+    },
+    "Workspace": {
+      "Shop Equipment": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Air Compressor": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Shop Vac": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 }
+      },
+      "Garage Space": {
+        "default": { "hourly": 5, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Garage Bay (1 Car)": { "hourly": 5, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Garage Bay (2+ Car)": { "hourly": 8, "daily": 40, "weekly": 130, "monthly": 320 },
+        "Workshop Access": { "hourly": 10, "daily": 50, "weekly": 160, "monthly": 400 }
+      },
+      "Storage Space": {
+        "default": { "hourly": 2, "daily": 10, "weekly": 35, "monthly": 80 }
+      }
+    },
+    "Specialized Equipment": {
+      "Photography & Video": {
+        "default": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "DSLR Camera": { "hourly": 10, "daily": 45, "weekly": 140, "monthly": 350 },
+        "Mirrorless Camera": { "hourly": 12, "daily": 50, "weekly": 160, "monthly": 400 },
+        "Lens (Wide Angle)": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Lens (Telephoto)": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Tripod": { "hourly": 2, "daily": 10, "weekly": 30, "monthly": 75 },
+        "Drone": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Lighting Kit": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 }
+      },
+      "Audio": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "PA System": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 }
+      },
+      "Projectors & Displays": {
+        "default": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 }
+      },
+      "Home Improvement": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "Pressure Washer (Electric)": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 },
+        "Pressure Washer (Gas)": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Carpet Cleaner": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Floor Sander": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Tile Saw": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Paint Sprayer": { "hourly": 6, "daily": 25, "weekly": 80, "monthly": 200 }
+      },
+      "Automotive": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Floor Jack": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Engine Hoist": { "hourly": 10, "daily": 45, "weekly": 140, "monthly": 350 }
+      },
+      "Welding & Metalwork": {
+        "default": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Welder (MIG)": { "hourly": 12, "daily": 50, "weekly": 160, "monthly": 400 },
+        "Welder (TIG)": { "hourly": 15, "daily": 60, "weekly": 180, "monthly": 450 },
+        "Plasma Cutter": { "hourly": 12, "daily": 50, "weekly": 160, "monthly": 400 }
+      },
+      "Sewing & Crafts": {
+        "default": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 },
+        "Sewing Machine": { "hourly": 3, "daily": 12, "weekly": 40, "monthly": 100 },
+        "Embroidery Machine": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Heat Press": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 }
+      },
+      "Electronics": {
+        "default": { "hourly": 8, "daily": 30, "weekly": 100, "monthly": 250 },
+        "3D Printer": { "hourly": 8, "daily": 35, "weekly": 110, "monthly": 280 },
+        "Laser Engraver": { "hourly": 12, "daily": 50, "weekly": 160, "monthly": 400 }
+      }
+    },
+    "Emergency & Cleanup": {
+      "Emergency": {
+        "default": { "hourly": 10, "daily": 40, "weekly": 120, "monthly": 300 },
+        "Generator (Portable)": { "hourly": 10, "daily": 45, "weekly": 140, "monthly": 350 },
+        "Generator (Standby)": { "hourly": 20, "daily": 80, "weekly": 240, "monthly": 600 },
+        "Sump Pump": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 }
+      },
+      "Cleanup": {
+        "default": { "hourly": 5, "daily": 20, "weekly": 60, "monthly": 150 },
+        "Dehumidifier": { "hourly": 4, "daily": 18, "weekly": 55, "monthly": 140 },
+        "Industrial Fan": { "hourly": 4, "daily": 15, "weekly": 50, "monthly": 120 }
+      }
+    }
+  },
+  "services": {
+    "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 },
+    "Home & Repair": {
+      "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 },
+      "General Handyman": { "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 } },
+      "Carpentry": { "default": { "hourly": 40, "daily": 240, "weekly": 840, "monthly": 2500 } },
+      "Plumbing": { "default": { "hourly": 50, "daily": 300, "weekly": 1000, "monthly": 3000 } },
+      "Electrical": { "default": { "hourly": 50, "daily": 300, "weekly": 1000, "monthly": 3000 } },
+      "Painting": { "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 } },
+      "Flooring": { "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 } }
+    },
+    "Yard & Outdoor": {
+      "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 },
+      "Lawn Care": { "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 } },
+      "Landscaping": { "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 } },
+      "Tree Services": { "default": { "hourly": 50, "daily": 300, "weekly": 1000, "monthly": 3000 } },
+      "Snow Removal": { "default": { "hourly": 40, "daily": 150, "weekly": 400, "monthly": 1000 } },
+      "Pressure Washing": { "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 } }
+    },
+    "Automotive": {
+      "default": { "hourly": 50, "daily": 300, "weekly": 1000, "monthly": 3000 },
+      "Maintenance": { "default": { "hourly": 40, "daily": 240, "weekly": 840, "monthly": 2500 } },
+      "Repair": { "default": { "hourly": 60, "daily": 350, "weekly": 1200, "monthly": 3500 } },
+      "Detailing": { "default": { "hourly": 30, "daily": 150, "weekly": 500, "monthly": 1500 } }
+    },
+    "Moving & Hauling": {
+      "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 },
+      "Moving Help": { "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 } },
+      "Junk Removal": { "default": { "hourly": 40, "daily": 200, "weekly": 700, "monthly": 2000 } },
+      "Delivery": { "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 } }
+    },
+    "Cleaning": {
+      "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 },
+      "House Cleaning": { "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 } },
+      "Specialized Cleaning": { "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 } }
+    },
+    "Tech & Assembly": {
+      "default": { "hourly": 40, "daily": 240, "weekly": 840, "monthly": 2500 },
+      "Tech Support": { "default": { "hourly": 45, "daily": 270, "weekly": 950, "monthly": 2800 } },
+      "Assembly": { "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 } }
+    },
+    "Creative & Media": {
+      "default": { "hourly": 50, "daily": 300, "weekly": 1000, "monthly": 3000 },
+      "Photography": { "default": { "hourly": 75, "daily": 400, "weekly": 1400, "monthly": 4000 } },
+      "Videography": { "default": { "hourly": 75, "daily": 400, "weekly": 1400, "monthly": 4000 } },
+      "Graphic Design": { "default": { "hourly": 40, "daily": 240, "weekly": 840, "monthly": 2500 } }
+    },
+    "Personal Services": {
+      "default": { "hourly": 20, "daily": 120, "weekly": 400, "monthly": 1200 },
+      "Pet Care": { "default": { "hourly": 20, "daily": 50, "weekly": 200, "monthly": 600 } },
+      "Childcare": { "default": { "hourly": 18, "daily": 100, "weekly": 400, "monthly": 1200 } },
+      "Transportation": { "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 } }
+    },
+    "Event Services": {
+      "default": { "hourly": 35, "daily": 200, "weekly": 700, "monthly": 2000 },
+      "Event Setup": { "default": { "hourly": 30, "daily": 180, "weekly": 600, "monthly": 1800 } },
+      "Catering & Food": { "default": { "hourly": 25, "daily": 150, "weekly": 500, "monthly": 1500 } },
+      "Entertainment": { "default": { "hourly": 75, "daily": 400, "weekly": 1400, "monthly": 4000 } }
+    }
+  },
+  "conditionMultipliers": {
+    "new": 1.2,
+    "excellent": 1.1,
+    "good": 1.0,
+    "fair": 0.85,
+    "poor": 0.7
+  }
+}

@@ -26,6 +26,11 @@ enum Category {
   other
 }
 
+enum ListingType {
+  item
+  service
+}
+
 enum ItemCondition {
   new
   excellent
@@ -113,10 +118,16 @@ model User {
   id              String   @id @default(uuid()) @db.Uuid
   email           String   @unique
   passwordHash    String   @map("password_hash")
-  fullName        String   @map("full_name")
+  firstName       String   @map("first_name")
+  middleName      String?  @map("middle_name")
+  lastName        String   @map("last_name")
   phoneNumber     String?  @unique @map("phone_number")
   profilePhotoUrl String?  @map("profile_photo_url")
-  address         String?
+  address         String?  // Street address line 1
+  address2        String?  @map("address_2") // Apt, Suite, etc.
+  city            String?
+  state           String?
+  zipCode         String?  @map("zip_code")
   latitude        Decimal? @db.Decimal(10, 8)
   longitude       Decimal? @db.Decimal(11, 8)
   neighborhood    String?
@@ -125,15 +136,17 @@ model User {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  items                  Item[]
-  requests               Request[]
-  borrowerTransactions   Transaction[]  @relation("BorrowerTransactions")
-  lenderTransactions     Transaction[]  @relation("LenderTransactions")
-  uploadedPhotos         Photo[]
-  sentMessages           Message[]      @relation("SentMessages")
-  receivedMessages       Message[]      @relation("ReceivedMessages")
-  ratingsGiven           Rating[]       @relation("RatingsGiven")
-  ratingsReceived        Rating[]       @relation("RatingsReceived")
+  items                   Item[]
+  requests                Request[]
+  borrowerTransactions    Transaction[]  @relation("BorrowerTransactions")
+  lenderTransactions      Transaction[]  @relation("LenderTransactions")
+  uploadedPhotos          Photo[]
+  sentMessages            Message[]      @relation("SentMessages")
+  receivedMessages        Message[]      @relation("ReceivedMessages")
+  ratingsGiven            Rating[]       @relation("RatingsGiven")
+  ratingsReceived         Rating[]       @relation("RatingsReceived")
+  notificationPreferences NotificationPreference[]
+  notifications           Notification[]
 
   @@index([latitude, longitude], name: "idx_user_location")
   @@index([neighborhood], name: "idx_user_neighborhood")
@@ -144,8 +157,19 @@ model User {
 model Item {
   id                   String               @id @default(uuid()) @db.Uuid
   ownerId              String               @map("owner_id") @db.Uuid
+
+  // Legacy category field (kept for backward compatibility)
   category             Category
   subcategory          String?
+
+  // New hierarchical category fields
+  listingType          ListingType?         @map("listing_type")
+  categoryTier1        String?              @map("category_tier1")
+  categoryTier2        String?              @map("category_tier2")
+  categoryTier3        String?              @map("category_tier3")
+  isOther              Boolean              @default(false) @map("is_other")
+  customItemName       String?              @map("custom_item_name")
+
   title                String
   description          String?              @db.Text
   condition            ItemCondition
@@ -156,8 +180,11 @@ model Item {
   protectionPreference ProtectionPreference @map("protection_preference")
   depositPercentage    Int                  @default(0) @map("deposit_percentage")
   isAvailable          Boolean              @default(true) @map("is_available")
+  availableFrom        DateTime?            @map("available_from")
+  availableUntil       DateTime?            @map("available_until")
   photoUrls            Json                 @default("[]") @map("photo_urls")
   specialInstructions  String?              @map("special_instructions") @db.Text
+  details              Json?                @default("{}") // Stores category-specific details like { "length": "180-195cm", "bootsIncluded": true }
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
 
@@ -170,6 +197,8 @@ model Item {
   @@index([category], name: "idx_item_category")
   @@index([isAvailable], name: "idx_item_available")
   @@index([ownerId, isAvailable], name: "idx_item_owner_available")
+  @@index([listingType, categoryTier1], name: "idx_item_type_tier1")
+  @@index([listingType, categoryTier1, categoryTier2], name: "idx_item_type_tier1_tier2")
   @@map("items")
 }
 
@@ -177,8 +206,20 @@ model Item {
 model Request {
   id              String        @id @default(uuid()) @db.Uuid
   requesterId     String        @map("requester_id") @db.Uuid
+
+  // Legacy category field (kept for backward compatibility)
   category        Category
+
+  // New hierarchical category fields
+  listingType     ListingType?  @map("listing_type")
+  categoryTier1   String?       @map("category_tier1")
+  categoryTier2   String?       @map("category_tier2")
+  categoryTier3   String?       @map("category_tier3")
+  isOther         Boolean       @default(false) @map("is_other")
+  customNeed      String?       @map("custom_need")
+
   title           String
+  details         Json?         @default("{}") // Stores required/preferred specifications for the request
   description     String?       @db.Text
   neededFrom      DateTime      @map("needed_from")
   neededUntil     DateTime      @map("needed_until")
@@ -201,6 +242,8 @@ model Request {
   @@index([category], name: "idx_request_category")
   @@index([expiresAt], name: "idx_request_expires")
   @@index([latitude, longitude, status], name: "idx_request_location_status")
+  @@index([listingType, categoryTier1], name: "idx_request_type_tier1")
+  @@index([listingType, categoryTier1, categoryTier2], name: "idx_request_type_tier1_tier2")
   @@map("requests")
 }
 
@@ -248,6 +291,8 @@ model Transaction {
   paymentStatus    PaymentStatus     @default(pending) @map("payment_status")
   paymentIntentId  String?           @map("payment_intent_id")
   disputeReason    String?           @map("dispute_reason") @db.Text
+  returnReminderSent Boolean         @default(false) @map("return_reminder_sent")
+  overdueNotificationSent Boolean    @default(false) @map("overdue_notification_sent")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -338,4 +383,43 @@ model Rating {
   @@index([transactionId], name: "idx_rating_transaction")
   @@index([ratedUserId], name: "idx_rating_rated_user")
   @@map("ratings")
+}
+
+/// Notification preferences per user per type
+model NotificationPreference {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  notificationType String   @map("notification_type")
+  inAppEnabled     Boolean  @default(true) @map("in_app_enabled")
+  emailEnabled     Boolean  @default(true) @map("email_enabled")
+  smsEnabled       Boolean  @default(false) @map("sms_enabled")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType], name: "unique_user_notification_type")
+  @@index([userId], name: "idx_notification_pref_user")
+  @@map("notification_preferences")
+}
+
+/// Notifications sent to users
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String    // notification type
+  title     String
+  message   String
+  data      Json?     // additional data (transactionId, itemId, etc.)
+  isRead    Boolean   @default(false) @map("is_read")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead], name: "idx_notification_user_read")
+  @@index([userId, createdAt], name: "idx_notification_user_created")
+  @@map("notifications")
 }

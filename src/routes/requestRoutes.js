@@ -1,15 +1,16 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, query } = require('express-validator');
 const {
   createRequest,
   getRequest,
   getMyRequests,
   cancelRequest,
   getRequestMatches,
+  browseRequests,
 } = require('../controllers/requestController');
 const { respondToMatch, getIncomingMatches } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
-const { authenticate } = require('../middleware/authMiddleware');
+const { authenticate, optionalAuth } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
@@ -25,6 +26,28 @@ const CATEGORIES = [
   'services',
   'other',
 ];
+
+// GET /api/requests/browse (public, must be before /:id route)
+router.get(
+  '/browse',
+  optionalAuth,
+  [
+    query('search').optional().trim(),
+    query('listingType').optional().isIn(['item', 'service']),
+    query('categoryTier1').optional().trim(),
+    query('categoryTier2').optional().trim(),
+    query('categoryTier3').optional().trim(),
+    query('latitude').optional().isFloat({ min: -90, max: 90 }),
+    query('longitude').optional().isFloat({ min: -180, max: 180 }),
+    query('radiusMiles').optional().isFloat({ min: 0.1, max: 100 }),
+    query('neededFrom').optional().isISO8601(),
+    query('neededUntil').optional().isISO8601(),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('offset').optional().isInt({ min: 0 }),
+  ],
+  handleValidationErrors,
+  asyncHandler(browseRequests)
+);
 
 // GET /api/requests/my-requests (must be before /:id route)
 router.get('/my-requests', authenticate, asyncHandler(getMyRequests));

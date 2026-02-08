@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const { notifyUser } = require('../services/notificationService');
 
 /**
  * Submit a rating after transaction completion
@@ -46,7 +47,7 @@ async function submitRating(req, res) {
   // Check if user already rated this transaction
   const existingRating = await prisma.rating.findUnique({
     where: {
-      transactionId_raterId: {
+      unique_rating_per_transaction_per_rater: {
         transactionId,
         raterId: req.user.id,
       },
@@ -77,9 +78,22 @@ async function submitRating(req, res) {
     },
     include: {
       ratedUser: {
-        select: { id: true, fullName: true },
+        select: { id: true, firstName: true, lastName: true },
+      },
+      rater: {
+        select: { id: true, firstName: true, lastName: true },
       },
     },
+  });
+
+  // Notify the rated user
+  const raterFullName = [rating.rater.firstName, rating.rater.lastName].filter(Boolean).join(' ');
+  await notifyUser(ratedUserId, 'rating_received', {
+    transactionId,
+    ratingId: rating.id,
+    rating: overallRating,
+    raterId: req.user.id,
+    raterName: raterFullName,
   });
 
   // Check if both parties have rated, if so mark transaction as completed
@@ -121,10 +135,10 @@ async function getTransactionRatings(req, res) {
     where: { transactionId },
     include: {
       rater: {
-        select: { id: true, fullName: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
       },
       ratedUser: {
-        select: { id: true, fullName: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
       },
     },
   });

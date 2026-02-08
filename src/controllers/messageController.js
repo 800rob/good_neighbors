@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const { notifyUser } = require('../services/notificationService');
 
 /**
  * Send a message in a transaction
@@ -37,9 +38,25 @@ async function sendMessage(req, res) {
     },
     include: {
       sender: {
-        select: { id: true, fullName: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
       },
     },
+  });
+
+  // Get item title for notification context
+  const transactionWithItem = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    include: { item: { select: { title: true } } },
+  });
+
+  // Notify the recipient of the new message
+  const senderFullName = [message.sender.firstName, message.sender.lastName].filter(Boolean).join(' ');
+  await notifyUser(recipientId, 'message_received', {
+    transactionId,
+    messageId: message.id,
+    senderId: req.user.id,
+    senderName: senderFullName,
+    itemTitle: transactionWithItem?.item?.title || 'your transaction',
   });
 
   res.status(201).json(message);
@@ -72,7 +89,7 @@ async function getMessages(req, res) {
       where: { transactionId },
       include: {
         sender: {
-          select: { id: true, fullName: true, profilePhotoUrl: true },
+          select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
         },
       },
       orderBy: { createdAt: 'asc' },

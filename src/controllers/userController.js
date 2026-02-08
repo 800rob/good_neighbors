@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const { geocodeAddress } = require('../utils/geocoding');
 
 /**
  * Get current user profile
@@ -41,13 +42,23 @@ async function getCurrentUser(req, res) {
     ? borrowerRatings.reduce((sum, r) => sum + r.overallRating, 0) / borrowerRatings.length
     : null;
 
+  // Build full name for display
+  const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
+
   res.json({
     id: user.id,
     email: user.email,
-    fullName: user.fullName,
+    firstName: user.firstName,
+    middleName: user.middleName,
+    lastName: user.lastName,
+    fullName,
     phoneNumber: user.phoneNumber,
     profilePhotoUrl: user.profilePhotoUrl,
     address: user.address,
+    address2: user.address2,
+    city: user.city,
+    state: user.state,
+    zipCode: user.zipCode,
     latitude: user.latitude,
     longitude: user.longitude,
     neighborhood: user.neighborhood,
@@ -70,7 +81,21 @@ async function getCurrentUser(req, res) {
  * PUT /api/users/me
  */
 async function updateCurrentUser(req, res) {
-  const { fullName, phoneNumber, profilePhotoUrl, address, latitude, longitude, neighborhood } = req.body;
+  const {
+    firstName,
+    middleName,
+    lastName,
+    phoneNumber,
+    profilePhotoUrl,
+    address,
+    address2,
+    city,
+    state,
+    zipCode,
+    latitude,
+    longitude,
+    neighborhood
+  } = req.body;
 
   // Check if phone number is taken by another user
   if (phoneNumber) {
@@ -86,26 +111,57 @@ async function updateCurrentUser(req, res) {
     }
   }
 
+  // Determine latitude/longitude
+  let finalLatitude = latitude ? parseFloat(latitude) : undefined;
+  let finalLongitude = longitude ? parseFloat(longitude) : undefined;
+
+  // If no GPS coordinates provided but address info is available, geocode the address
+  if (!latitude && !longitude && (address || city || zipCode)) {
+    console.log('[Profile Update] Geocoding address...');
+    const coords = await geocodeAddress({ address, city, state, zipCode });
+    if (coords) {
+      finalLatitude = coords.latitude;
+      finalLongitude = coords.longitude;
+      console.log(`[Profile Update] Geocoded to: ${finalLatitude}, ${finalLongitude}`);
+    }
+  }
+
   const user = await prisma.user.update({
     where: { id: req.user.id },
     data: {
-      fullName,
+      firstName,
+      middleName,
+      lastName,
       phoneNumber,
       profilePhotoUrl,
       address,
-      latitude: latitude ? parseFloat(latitude) : undefined,
-      longitude: longitude ? parseFloat(longitude) : undefined,
+      address2,
+      city,
+      state,
+      zipCode,
+      latitude: finalLatitude,
+      longitude: finalLongitude,
       neighborhood,
     },
   });
 
+  // Build full name for display
+  const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
+
   res.json({
     id: user.id,
     email: user.email,
-    fullName: user.fullName,
+    firstName: user.firstName,
+    middleName: user.middleName,
+    lastName: user.lastName,
+    fullName,
     phoneNumber: user.phoneNumber,
     profilePhotoUrl: user.profilePhotoUrl,
     address: user.address,
+    address2: user.address2,
+    city: user.city,
+    state: user.state,
+    zipCode: user.zipCode,
     latitude: user.latitude,
     longitude: user.longitude,
     neighborhood: user.neighborhood,
@@ -127,7 +183,7 @@ async function getUserProfile(req, res) {
       ratingsReceived: {
         include: {
           rater: {
-            select: { id: true, fullName: true, profilePhotoUrl: true },
+            select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
           },
           transaction: {
             select: { id: true },
@@ -160,11 +216,18 @@ async function getUserProfile(req, res) {
     ? ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length
     : null;
 
+  // Build full name for display
+  const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
+
   res.json({
     id: user.id,
-    fullName: user.fullName,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    fullName,
     profilePhotoUrl: user.profilePhotoUrl,
     neighborhood: user.neighborhood,
+    city: user.city,
+    state: user.state,
     isVerified: user.isVerified,
     createdAt: user.createdAt,
     stats: {
@@ -209,7 +272,7 @@ async function getUserRatings(req, res) {
       where,
       include: {
         rater: {
-          select: { id: true, fullName: true, profilePhotoUrl: true },
+          select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
         },
         transaction: {
           select: { id: true, item: { select: { id: true, title: true } } },

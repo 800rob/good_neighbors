@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const { notifyUser } = require('../services/notificationService');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -128,12 +129,22 @@ async function createTransaction(req, res) {
     include: {
       item: true,
       borrower: {
-        select: { id: true, fullName: true, phoneNumber: true },
+        select: { id: true, firstName: true, lastName: true, phoneNumber: true },
       },
       lender: {
-        select: { id: true, fullName: true, phoneNumber: true },
+        select: { id: true, firstName: true, lastName: true, phoneNumber: true },
       },
     },
+  });
+
+  // Notify the lender of the new transaction request
+  const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
+  await notifyUser(item.ownerId, 'transaction_requested', {
+    transactionId: transaction.id,
+    itemId: item.id,
+    itemTitle: item.title,
+    borrowerId: req.user.id,
+    borrowerName: borrowerFullName,
   });
 
   res.status(201).json(transaction);
@@ -151,10 +162,10 @@ async function getTransaction(req, res) {
     include: {
       item: true,
       borrower: {
-        select: { id: true, fullName: true, phoneNumber: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, phoneNumber: true, profilePhotoUrl: true },
       },
       lender: {
-        select: { id: true, fullName: true, phoneNumber: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, phoneNumber: true, profilePhotoUrl: true },
       },
       photos: true,
       ratings: true,
@@ -209,10 +220,10 @@ async function getMyTransactions(req, res) {
           select: { id: true, title: true, photoUrls: true },
         },
         borrower: {
-          select: { id: true, fullName: true, profilePhotoUrl: true },
+          select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
         },
         lender: {
-          select: { id: true, fullName: true, profilePhotoUrl: true },
+          select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -302,13 +313,62 @@ async function updateTransactionStatus(req, res) {
     include: {
       item: true,
       borrower: {
-        select: { id: true, fullName: true },
+        select: { id: true, firstName: true, lastName: true },
       },
       lender: {
-        select: { id: true, fullName: true },
+        select: { id: true, firstName: true, lastName: true },
       },
     },
   });
+
+  // Send notifications based on status change
+  const borrowerName = [updatedTransaction.borrower.firstName, updatedTransaction.borrower.lastName].filter(Boolean).join(' ');
+  const lenderName = [updatedTransaction.lender.firstName, updatedTransaction.lender.lastName].filter(Boolean).join(' ');
+  const notificationContext = {
+    transactionId: updatedTransaction.id,
+    itemId: updatedTransaction.item.id,
+    itemTitle: updatedTransaction.item.title,
+    borrowerId: updatedTransaction.borrowerId,
+    borrowerName,
+    lenderId: updatedTransaction.lenderId,
+    lenderName,
+  };
+
+  // Determine who to notify and what type
+  switch (status) {
+    case 'accepted':
+      await notifyUser(updatedTransaction.borrowerId, 'transaction_accepted', notificationContext);
+      break;
+    case 'cancelled':
+      // Notify the other party if cancelled
+      const cancelledNotifyUser = req.user.id === updatedTransaction.borrowerId
+        ? updatedTransaction.lenderId
+        : updatedTransaction.borrowerId;
+      await notifyUser(cancelledNotifyUser, 'transaction_declined', notificationContext);
+      break;
+    case 'pickup_confirmed':
+      // Notify the other party
+      const pickupNotifyUser = req.user.id === updatedTransaction.borrowerId
+        ? updatedTransaction.lenderId
+        : updatedTransaction.borrowerId;
+      await notifyUser(pickupNotifyUser, 'pickup_confirmed', notificationContext);
+      break;
+    case 'return_initiated':
+      await notifyUser(updatedTransaction.lenderId, 'return_initiated', notificationContext);
+      break;
+    case 'completed':
+      // Notify both parties
+      await notifyUser(updatedTransaction.borrowerId, 'transaction_completed', notificationContext);
+      await notifyUser(updatedTransaction.lenderId, 'transaction_completed', notificationContext);
+      break;
+    case 'disputed':
+      // Notify the other party
+      const disputeNotifyUser = req.user.id === updatedTransaction.borrowerId
+        ? updatedTransaction.lenderId
+        : updatedTransaction.borrowerId;
+      await notifyUser(disputeNotifyUser, 'transaction_disputed', notificationContext);
+      break;
+  }
 
   res.json(updatedTransaction);
 }

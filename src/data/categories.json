@@ -1,0 +1,648 @@
+{
+  "items": {
+    "Tools": {
+      "Power Tools": [
+        "Drill (Corded)",
+        "Drill (Cordless)",
+        "Impact Driver",
+        "Circular Saw",
+        "Miter Saw",
+        "Table Saw",
+        "Jigsaw",
+        "Reciprocating Saw",
+        "Angle Grinder",
+        "Orbital Sander",
+        "Belt Sander",
+        "Nail Gun",
+        "Staple Gun",
+        "Rotary Tool",
+        "Oscillating Multi-Tool",
+        "Other"
+      ],
+      "Hand Tools": [
+        "Hammer",
+        "Screwdriver Set",
+        "Wrench Set",
+        "Socket Set",
+        "Pliers Set",
+        "Level",
+        "Tape Measure",
+        "Stud Finder",
+        "Utility Knife",
+        "Hand Saw",
+        "Chisel Set",
+        "Files & Rasps",
+        "Clamps",
+        "Vice",
+        "Other"
+      ],
+      "Ladders & Scaffolding": [
+        "Step Ladder (4-6 ft)",
+        "Step Ladder (8-10 ft)",
+        "Extension Ladder (16-20 ft)",
+        "Extension Ladder (24-32 ft)",
+        "A-Frame Ladder",
+        "Scaffolding Set",
+        "Work Platform",
+        "Other"
+      ],
+      "Measuring & Layout": [
+        "Laser Level",
+        "Transit Level",
+        "Measuring Wheel",
+        "Chalk Line",
+        "Speed Square",
+        "Framing Square",
+        "Other"
+      ],
+      "Specialty Tools": [
+        "Tile Cutter",
+        "Pipe Wrench",
+        "Bolt Cutters",
+        "Pry Bar",
+        "Crowbar",
+        "Post Hole Digger",
+        "Other"
+      ]
+    },
+    "Outdoor & Recreation": {
+      "Camping": [
+        "Tent (2-Person)",
+        "Tent (4-Person)",
+        "Tent (6+ Person)",
+        "Sleeping Bag (Summer)",
+        "Sleeping Bag (Winter)",
+        "Sleeping Pad",
+        "Camp Stove",
+        "Cooler (Small, <25 qt)",
+        "Cooler (Medium, 25-50 qt)",
+        "Cooler (Large, 50+ qt)",
+        "Camping Chairs",
+        "Camping Table",
+        "Lantern",
+        "Headlamp",
+        "Backpack (Day Pack)",
+        "Backpack (Overnight)",
+        "Other"
+      ],
+      "Water Sports": [
+        "Kayak (Recreational)",
+        "Kayak (Fishing)",
+        "Canoe",
+        "Paddleboard (SUP)",
+        "Paddle (Kayak)",
+        "Paddle (Canoe)",
+        "Paddle (SUP)",
+        "Life Jackets",
+        "Dry Bags",
+        "Water Skis",
+        "Wakeboard",
+        "Inflatable Raft",
+        "Other"
+      ],
+      "Winter Sports": [
+        "Alpine Skis",
+        "Ski Boots (Alpine)",
+        "Ski Poles",
+        "Snowboard",
+        "Snowboard Boots",
+        "Classic Cross-Country Skis",
+        "Skate Cross-Country Skis",
+        "XC Ski Boots",
+        "Snowshoes",
+        "Sled/Toboggan",
+        "Other"
+      ],
+      "Cycling": [
+        "Mountain Bike",
+        "Road Bike",
+        "Hybrid Bike",
+        "Kids Bike",
+        "Bike Trailer (Child)",
+        "Bike Trailer (Cargo)",
+        "Bike Rack (Car)",
+        "Bike Pump",
+        "Bike Repair Stand",
+        "Other"
+      ],
+      "Climbing & Hiking": [
+        "Climbing Harness",
+        "Climbing Rope",
+        "Carabiners",
+        "Belay Device",
+        "Crash Pad (Bouldering)",
+        "Hiking Poles",
+        "Trekking Poles",
+        "GPS Device",
+        "Other"
+      ],
+      "Fishing": [
+        "Fishing Rod (Spinning)",
+        "Fishing Rod (Fly)",
+        "Fishing Rod (Baitcasting)",
+        "Tackle Box",
+        "Fish Finder",
+        "Fishing Net",
+        "Waders",
+        "Other"
+      ]
+    },
+    "Party & Events": {
+      "Tables & Seating": [
+        "Folding Tables (6 ft)",
+        "Folding Tables (8 ft)",
+        "Round Tables (60 in)",
+        "Folding Chairs",
+        "Banquet Chairs",
+        "Kids Tables",
+        "Kids Chairs",
+        "Other"
+      ],
+      "Tents & Canopies": [
+        "Pop-Up Canopy (10x10)",
+        "Pop-Up Canopy (10x20)",
+        "Party Tent (20x20)",
+        "Party Tent (20x30+)",
+        "Sidewalls for Canopy",
+        "Other"
+      ],
+      "Cooking Equipment": [
+        "Grill (Charcoal)",
+        "Grill (Propane)",
+        "Smoker",
+        "Griddle",
+        "Propane Burner",
+        "Large Cooler",
+        "Beverage Dispenser",
+        "Chafing Dishes",
+        "Other"
+      ],
+      "Entertainment": [
+        "Projector & Screen",
+        "Sound System/Speakers",
+        "Microphone",
+        "Karaoke Machine",
+        "Bounce House",
+        "Games (Cornhole)",
+        "Games (Giant Jenga)",
+        "Games (Yard Games Set)",
+        "Photo Booth Props",
+        "Other"
+      ],
+      "Serving & Dinnerware": [
+        "Serving Platters",
+        "Punch Bowls",
+        "Coffee Urns",
+        "Large Pots",
+        "Tablecloths",
+        "Chair Covers",
+        "Decorations",
+        "Other"
+      ]
+    },
+    "Lawn & Garden": {
+      "Mowing": [
+        "Push Mower (Gas)",
+        "Push Mower (Electric)",
+        "Riding Mower",
+        "Zero-Turn Mower",
+        "Reel Mower",
+        "Other"
+      ],
+      "Trimming & Edging": [
+        "String Trimmer (Gas)",
+        "String Trimmer (Electric)",
+        "Edger",
+        "Hedge Trimmer",
+        "Pole Saw",
+        "Chainsaw (Small, <16 in)",
+        "Chainsaw (Large, 16+ in)",
+        "Other"
+      ],
+      "Leaf & Debris": [
+        "Leaf Blower (Gas)",
+        "Leaf Blower (Electric)",
+        "Leaf Vacuum",
+        "Lawn Sweeper",
+        "Other"
+      ],
+      "Soil & Planting": [
+        "Tiller/Cultivator",
+        "Aerator (Manual)",
+        "Aerator (Power)",
+        "Seeder/Spreader",
+        "Garden Hose",
+        "Sprinkler",
+        "Wheelbarrow",
+        "Garden Cart",
+        "Other"
+      ],
+      "Tree & Stump": [
+        "Stump Grinder",
+        "Log Splitter",
+        "Wood Chipper",
+        "Other"
+      ],
+      "Snow Removal": [
+        "Snowblower (Single-Stage)",
+        "Snowblower (Two-Stage)",
+        "Snow Shovel",
+        "Ice Melt Spreader",
+        "Other"
+      ]
+    },
+    "Vehicles & Transport": {
+      "Trucks & Trailers": [
+        "Pickup Truck",
+        "Cargo Van",
+        "Box Truck",
+        "Utility Trailer (4x8)",
+        "Utility Trailer (5x10)",
+        "Utility Trailer (6x12+)",
+        "Enclosed Trailer",
+        "Car Trailer",
+        "Motorcycle Trailer",
+        "Boat Trailer",
+        "Other"
+      ],
+      "Moving Equipment": [
+        "Dolly (Hand Truck)",
+        "Furniture Dolly (4-Wheel)",
+        "Appliance Dolly",
+        "Moving Blankets",
+        "Tie-Down Straps",
+        "Cargo Carrier (Roof)",
+        "Cargo Carrier (Hitch)",
+        "Other"
+      ],
+      "Car Accessories": [
+        "Bike Rack (Hitch)",
+        "Bike Rack (Roof)",
+        "Cargo Box (Roof)",
+        "Ski Rack",
+        "Car Top Carrier",
+        "Tow Hitch",
+        "Jump Starter",
+        "Other"
+      ]
+    },
+    "Workspace": {
+      "Shop Equipment": [
+        "Workbench",
+        "Tool Chest/Cabinet",
+        "Air Compressor",
+        "Shop Vac",
+        "Work Lights",
+        "Extension Cords (Heavy Duty)",
+        "Power Strip",
+        "Other"
+      ],
+      "Garage Space": [
+        "Garage Bay (1 Car)",
+        "Garage Bay (2+ Car)",
+        "Driveway Space",
+        "Workshop Access",
+        "Other"
+      ],
+      "Storage Space": [
+        "Storage Unit Access",
+        "Shed Space",
+        "Basement Space",
+        "Attic Space",
+        "Other"
+      ]
+    },
+    "Specialized Equipment": {
+      "Photography & Video": [
+        "DSLR Camera",
+        "Mirrorless Camera",
+        "Lens (Wide Angle)",
+        "Lens (Telephoto)",
+        "Lens (Macro)",
+        "Tripod",
+        "Video Camera",
+        "GoPro/Action Camera",
+        "Drone",
+        "Lighting Kit",
+        "Backdrop/Green Screen",
+        "Other"
+      ],
+      "Audio": [
+        "Microphone (USB)",
+        "Microphone (XLR)",
+        "Audio Interface",
+        "Mixer",
+        "PA System",
+        "Studio Monitors",
+        "Headphones (Studio)",
+        "Other"
+      ],
+      "Projectors & Displays": [
+        "Projector (Home Theater)",
+        "Projector (Business)",
+        "Projector Screen",
+        "Large Monitor/TV",
+        "Other"
+      ],
+      "Home Improvement": [
+        "Pressure Washer (Electric)",
+        "Pressure Washer (Gas)",
+        "Carpet Cleaner",
+        "Floor Sander",
+        "Tile Saw",
+        "Wet/Dry Vacuum",
+        "Paint Sprayer",
+        "Wallpaper Steamer",
+        "Concrete Mixer",
+        "Other"
+      ],
+      "Automotive": [
+        "Floor Jack",
+        "Jack Stands",
+        "Ramps",
+        "Creeper",
+        "Engine Hoist",
+        "Transmission Jack",
+        "Diagnostic Scanner (OBD2)",
+        "Battery Charger",
+        "Other"
+      ],
+      "Welding & Metalwork": [
+        "Welder (MIG)",
+        "Welder (TIG)",
+        "Welder (Stick)",
+        "Plasma Cutter",
+        "Angle Grinder",
+        "Metal Brake",
+        "Other"
+      ],
+      "Sewing & Crafts": [
+        "Sewing Machine",
+        "Serger",
+        "Embroidery Machine",
+        "Cutting Machine (Cricut/Silhouette)",
+        "Heat Press",
+        "Other"
+      ],
+      "Electronics": [
+        "Soldering Station",
+        "3D Printer",
+        "Laser Engraver",
+        "Oscilloscope",
+        "Multimeter",
+        "Other"
+      ]
+    },
+    "Emergency & Cleanup": {
+      "Emergency": [
+        "Generator (Portable)",
+        "Generator (Standby)",
+        "Power Inverter",
+        "Extension Cords",
+        "Sump Pump",
+        "Other"
+      ],
+      "Cleanup": [
+        "Wet/Dry Vacuum",
+        "Dehumidifier",
+        "Industrial Fan",
+        "Carpet Dryer",
+        "Other"
+      ]
+    }
+  },
+  "services": {
+    "Home & Repair": {
+      "General Handyman": [
+        "Furniture Assembly",
+        "Hanging Pictures/Shelves",
+        "Door Repair/Installation",
+        "Window Repair",
+        "Drywall Repair",
+        "Basic Plumbing",
+        "Basic Electrical",
+        "Other"
+      ],
+      "Carpentry": [
+        "Deck Building/Repair",
+        "Fence Installation/Repair",
+        "Cabinet Installation",
+        "Trim Work",
+        "Framing",
+        "Other"
+      ],
+      "Plumbing": [
+        "Drain Cleaning",
+        "Faucet Repair/Installation",
+        "Toilet Repair/Installation",
+        "Water Heater Service",
+        "Pipe Repair",
+        "Other"
+      ],
+      "Electrical": [
+        "Light Fixture Installation",
+        "Outlet/Switch Installation",
+        "Ceiling Fan Installation",
+        "Electrical Troubleshooting",
+        "Panel Upgrades",
+        "Other"
+      ],
+      "Painting": [
+        "Interior Painting",
+        "Exterior Painting",
+        "Deck Staining",
+        "Cabinet Painting",
+        "Wallpaper Removal",
+        "Other"
+      ],
+      "Flooring": [
+        "Hardwood Installation",
+        "Laminate Installation",
+        "Tile Installation",
+        "Carpet Installation",
+        "Floor Refinishing",
+        "Other"
+      ]
+    },
+    "Yard & Outdoor": {
+      "Lawn Care": [
+        "Mowing",
+        "Edging & Trimming",
+        "Fertilizing",
+        "Weed Control",
+        "Aeration",
+        "Seeding",
+        "Other"
+      ],
+      "Landscaping": [
+        "Garden Design",
+        "Planting (Shrubs/Trees)",
+        "Mulching",
+        "Rock/Gravel Installation",
+        "Retaining Wall Installation",
+        "Other"
+      ],
+      "Tree Services": [
+        "Tree Trimming",
+        "Tree Removal",
+        "Stump Grinding",
+        "Other"
+      ],
+      "Snow Removal": [
+        "Snow Blowing",
+        "Shoveling",
+        "Ice Management",
+        "Other"
+      ],
+      "Pressure Washing": [
+        "House Washing",
+        "Driveway Cleaning",
+        "Deck Cleaning",
+        "Fence Cleaning",
+        "Other"
+      ]
+    },
+    "Automotive": {
+      "Maintenance": [
+        "Oil Change",
+        "Tire Rotation",
+        "Brake Service",
+        "Battery Replacement",
+        "Fluid Changes",
+        "Air Filter Replacement",
+        "Other"
+      ],
+      "Repair": [
+        "Engine Diagnostics",
+        "Brake Repair",
+        "Suspension Repair",
+        "Electrical Repair",
+        "Other"
+      ],
+      "Detailing": [
+        "Interior Cleaning",
+        "Exterior Wash/Wax",
+        "Paint Correction",
+        "Ceramic Coating",
+        "Other"
+      ]
+    },
+    "Moving & Hauling": {
+      "Moving Help": [
+        "Loading/Unloading",
+        "Packing",
+        "Furniture Moving",
+        "Heavy Item Moving",
+        "Full-Service Moving",
+        "Other"
+      ],
+      "Junk Removal": [
+        "Furniture Removal",
+        "Appliance Removal",
+        "Yard Waste Removal",
+        "General Junk Removal",
+        "Estate Cleanout",
+        "Other"
+      ],
+      "Delivery": [
+        "Furniture Delivery",
+        "Appliance Delivery",
+        "Material Delivery",
+        "Other"
+      ]
+    },
+    "Cleaning": {
+      "House Cleaning": [
+        "Standard Cleaning",
+        "Deep Cleaning",
+        "Move-In/Move-Out Cleaning",
+        "Post-Construction Cleaning",
+        "Other"
+      ],
+      "Specialized Cleaning": [
+        "Carpet Cleaning",
+        "Window Cleaning",
+        "Gutter Cleaning",
+        "Oven Cleaning",
+        "Other"
+      ]
+    },
+    "Tech & Assembly": {
+      "Tech Support": [
+        "Computer Repair",
+        "Network Setup",
+        "Smart Home Installation",
+        "TV Mounting/Setup",
+        "Other"
+      ],
+      "Assembly": [
+        "Furniture Assembly",
+        "Playset Assembly",
+        "Grill Assembly",
+        "Exercise Equipment Assembly",
+        "Other"
+      ]
+    },
+    "Creative & Media": {
+      "Photography": [
+        "Event Photography",
+        "Portrait Photography",
+        "Real Estate Photography",
+        "Product Photography",
+        "Other"
+      ],
+      "Videography": [
+        "Event Videography",
+        "Drone Videography",
+        "Video Editing",
+        "Other"
+      ],
+      "Graphic Design": [
+        "Logo Design",
+        "Flyer Design",
+        "Social Media Graphics",
+        "Other"
+      ]
+    },
+    "Personal Services": {
+      "Pet Care": [
+        "Dog Walking",
+        "Pet Sitting",
+        "Pet Grooming",
+        "Other"
+      ],
+      "Childcare": [
+        "Babysitting",
+        "Tutoring",
+        "Other"
+      ],
+      "Transportation": [
+        "Airport Rides",
+        "Errands",
+        "Moving Assistance",
+        "Other"
+      ]
+    },
+    "Event Services": {
+      "Event Setup": [
+        "Tent Setup",
+        "Table/Chair Setup",
+        "Decoration Setup",
+        "Other"
+      ],
+      "Catering & Food": [
+        "Bartending",
+        "Serving",
+        "Cooking/Grilling",
+        "Other"
+      ],
+      "Entertainment": [
+        "DJ Services",
+        "Live Music",
+        "Photography",
+        "Videography",
+        "Other"
+      ]
+    }
+  }
+}

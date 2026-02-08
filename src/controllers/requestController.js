@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const { findMatchesForRequest } = require('../utils/matching');
+const { getSpecsForItem, validateBorrowerSpecs } = require('../utils/specUtils');
 
 /**
  * Create a new request (borrower posts need)
@@ -16,7 +17,27 @@ async function createRequest(req, res) {
     maxDistanceMiles = 10,
     latitude,
     longitude,
+    // New hierarchical category fields
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
+    isOther,
+    customNeed,
+    // Specs/details
+    details,
   } = req.body;
+
+  // Validate specs if provided
+  if (details && details.specs && listingType && categoryTier1 && categoryTier2 && categoryTier3) {
+    const specDefs = getSpecsForItem(listingType, categoryTier1, categoryTier2, categoryTier3);
+    if (specDefs) {
+      const validation = validateBorrowerSpecs(specDefs, details.specs);
+      if (!validation.valid) {
+        return res.status(400).json({ error: 'Invalid specs', details: validation.errors });
+      }
+    }
+  }
 
   // Use requester's location if not provided
   const reqLat = latitude || req.user.latitude;
@@ -45,10 +66,18 @@ async function createRequest(req, res) {
       latitude: parseFloat(reqLat),
       longitude: parseFloat(reqLon),
       expiresAt,
+      // New hierarchical category fields
+      listingType: listingType || null,
+      categoryTier1: categoryTier1 || null,
+      categoryTier2: categoryTier2 || null,
+      categoryTier3: categoryTier3 || null,
+      isOther: isOther || false,
+      customNeed: customNeed || null,
+      details: details || {},
     },
     include: {
       requester: {
-        select: { id: true, fullName: true, neighborhood: true },
+        select: { id: true, firstName: true, lastName: true, neighborhood: true },
       },
     },
   });
@@ -74,14 +103,14 @@ async function getRequest(req, res) {
     where: { id },
     include: {
       requester: {
-        select: { id: true, fullName: true, neighborhood: true, profilePhotoUrl: true },
+        select: { id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true },
       },
       matches: {
         include: {
           item: {
             include: {
               owner: {
-                select: { id: true, fullName: true, neighborhood: true },
+                select: { id: true, firstName: true, lastName: true, neighborhood: true },
               },
             },
           },
@@ -193,7 +222,8 @@ async function getRequestMatches(req, res) {
           owner: {
             select: {
               id: true,
-              fullName: true,
+              firstName: true,
+              lastName: true,
               neighborhood: true,
               profilePhotoUrl: true,
               latitude: true,
@@ -209,4 +239,127 @@ async function getRequestMatches(req, res) {
   res.json(matches);
 }
 
-module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches };
+/**
+ * Browse open requests (public, with optional auth to exclude own)
+ * GET /api/requests/browse
+ */
+async function browseRequests(req, res) {
+  const {
+    search,
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
+    latitude,
+    longitude,
+    radiusMiles = 25,
+    neededFrom,
+    neededUntil,
+    status,
+    limit = 20,
+    offset = 0,
+  } = req.query;
+
+  const where = {
+    status: { in: status ? [].concat(status) : ['open', 'matched'] },
+  };
+
+  // Exclude current user's own requests if authenticated
+  if (req.user?.id) {
+    where.requesterId = { not: req.user.id };
+  }
+
+  // Hierarchical category filters
+  if (listingType) where.listingType = listingType;
+  if (categoryTier1) where.categoryTier1 = categoryTier1;
+  if (categoryTier2) where.categoryTier2 = categoryTier2;
+  if (categoryTier3) where.categoryTier3 = categoryTier3;
+
+  // Keyword search in title and description
+  if (search) {
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  // Date range overlap: request.neededFrom <= filterUntil AND request.neededUntil >= filterFrom
+  if (neededFrom) {
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { neededUntil: null },
+        { neededUntil: { gte: new Date(neededFrom) } },
+      ],
+    });
+  }
+  if (neededUntil) {
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { neededFrom: null },
+        { neededFrom: { lte: new Date(neededUntil) } },
+      ],
+    });
+  }
+
+  const [requests, total] = await Promise.all([
+    prisma.request.findMany({
+      where,
+      include: {
+        requester: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            neighborhood: true,
+            isVerified: true,
+            averageRating: true,
+            totalRatings: true,
+            profilePhotoUrl: true,
+          },
+        },
+        _count: { select: { matches: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit),
+      skip: parseInt(offset),
+    }),
+    prisma.request.count({ where }),
+  ]);
+
+  // Calculate distance if coordinates provided
+  let resultsWithDistance = requests;
+  if (latitude && longitude) {
+    const lat = parseFloat(latitude);
+    const lon = parseFloat(longitude);
+    const { calculateDistance } = require('../utils/distance');
+
+    resultsWithDistance = requests
+      .map((r) => {
+        const distance =
+          r.latitude && r.longitude
+            ? calculateDistance(lat, lon, r.latitude, r.longitude)
+            : null;
+        return { ...r, distance };
+      })
+      .filter((r) => {
+        if (!radiusMiles || !r.distance) return true;
+        return r.distance <= parseFloat(radiusMiles);
+      });
+  }
+
+  res.json({
+    requests: resultsWithDistance,
+    pagination: {
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    },
+  });
+}
+
+module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests };

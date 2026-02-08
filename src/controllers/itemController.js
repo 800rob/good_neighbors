@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const { calculateDistance } = require('../utils/distance');
+const { getSpecsForItem, validateLenderSpecs } = require('../utils/specUtils');
 
 /**
  * Create a new item listing
@@ -20,7 +21,29 @@ async function createItem(req, res) {
     depositPercentage,
     photoUrls,
     specialInstructions,
+    availableFrom,
+    availableUntil,
+    // New hierarchical category fields
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
+    isOther,
+    customItemName,
+    // Specs/details
+    details,
   } = req.body;
+
+  // Validate specs if provided
+  if (details && details.specs && listingType && categoryTier1 && categoryTier2 && categoryTier3) {
+    const specDefs = getSpecsForItem(listingType, categoryTier1, categoryTier2, categoryTier3);
+    if (specDefs) {
+      const validation = validateLenderSpecs(specDefs, details.specs);
+      if (!validation.valid) {
+        return res.status(400).json({ error: 'Invalid specs', details: validation.errors });
+      }
+    }
+  }
 
   const item = await prisma.item.create({
     data: {
@@ -30,7 +53,7 @@ async function createItem(req, res) {
       title,
       description,
       condition,
-      replacementValue: parseFloat(replacementValue),
+      replacementValue: parseFloat(replacementValue) || 0,
       pricingType,
       priceAmount: priceAmount ? parseFloat(priceAmount) : null,
       lateFeeAmount: lateFeeAmount ? parseFloat(lateFeeAmount) : null,
@@ -38,10 +61,20 @@ async function createItem(req, res) {
       depositPercentage: depositPercentage || 0,
       photoUrls: photoUrls || [],
       specialInstructions,
+      availableFrom: availableFrom ? new Date(availableFrom) : null,
+      availableUntil: availableUntil ? new Date(availableUntil) : null,
+      // New hierarchical category fields
+      listingType: listingType || null,
+      categoryTier1: categoryTier1 || null,
+      categoryTier2: categoryTier2 || null,
+      categoryTier3: categoryTier3 || null,
+      isOther: isOther || false,
+      customItemName: customItemName || null,
+      details: details || {},
     },
     include: {
       owner: {
-        select: { id: true, fullName: true, neighborhood: true },
+        select: { id: true, firstName: true, lastName: true, neighborhood: true },
       },
     },
   });
@@ -61,22 +94,100 @@ async function getItems(req, res) {
     minPrice,
     maxPrice,
     condition,
+    search,
     latitude,
     longitude,
     radiusMiles = 25,
+    availableFrom,
+    availableUntil,
     limit = 20,
     offset = 0,
     sortBy = 'createdAt',
     sortOrder = 'desc',
+    // New hierarchical category filters
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
   } = req.query;
 
   // Build where clause
   const where = { isAvailable: true };
 
+  // Exclude user's own items if authenticated
+  if (req.user?.id) {
+    where.ownerId = { not: req.user.id };
+  }
+
+  // Exclude items that are currently being lent (have active transactions)
+  where.NOT = {
+    transactions: {
+      some: {
+        status: {
+          in: ['accepted', 'pickup_confirmed', 'active', 'return_initiated']
+        }
+      }
+    }
+  };
+
+  // Legacy category filter (backward compatibility)
   if (category) where.category = category;
   if (subcategory) where.subcategory = subcategory;
+
+  // New hierarchical category filters
+  if (listingType) where.listingType = listingType;
+  if (categoryTier1) where.categoryTier1 = categoryTier1;
+  if (categoryTier2) where.categoryTier2 = categoryTier2;
+  if (categoryTier3) where.categoryTier3 = categoryTier3;
   if (pricingType) where.pricingType = pricingType;
-  if (condition) where.condition = condition;
+  if (condition) {
+    const hierarchy = ['poor', 'fair', 'good', 'excellent', 'new'];
+    const idx = hierarchy.indexOf(condition);
+    if (idx >= 0) {
+      where.condition = { in: hierarchy.slice(idx) };
+    } else {
+      where.condition = condition;
+    }
+  }
+
+  // Filter by availability dates
+  // Item is available if: no availableFrom set OR availableFrom <= requested date
+  // Item is available if: no availableUntil set OR availableUntil >= requested date
+  if (availableFrom) {
+    where.OR = [
+      { availableFrom: null },
+      { availableFrom: { lte: new Date(availableFrom) } }
+    ];
+  }
+  if (availableUntil) {
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { availableUntil: null },
+        { availableUntil: { gte: new Date(availableUntil) } }
+      ]
+    });
+  }
+
+  // Keyword search in title and description
+  if (search) {
+    const searchCondition = {
+      OR: [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ]
+    };
+    if (where.AND) {
+      where.AND.push(searchCondition);
+    } else if (where.OR) {
+      // If we already have OR for availableFrom, we need to restructure
+      const existingOr = where.OR;
+      delete where.OR;
+      where.AND = [{ OR: existingOr }, searchCondition];
+    } else {
+      where.OR = searchCondition.OR;
+    }
+  }
 
   if (minPrice || maxPrice) {
     where.priceAmount = {};
@@ -91,7 +202,8 @@ async function getItems(req, res) {
       owner: {
         select: {
           id: true,
-          fullName: true,
+          firstName: true,
+          lastName: true,
           neighborhood: true,
           latitude: true,
           longitude: true,
@@ -156,7 +268,8 @@ async function getItem(req, res) {
       owner: {
         select: {
           id: true,
-          fullName: true,
+          firstName: true,
+          lastName: true,
           neighborhood: true,
           latitude: true,
           longitude: true,
@@ -172,6 +285,24 @@ async function getItem(req, res) {
     return res.status(404).json({ error: 'Item not found' });
   }
 
+  // Check if item has an active transaction (currently being borrowed)
+  const activeTransaction = await prisma.transaction.findFirst({
+    where: {
+      itemId: id,
+      status: {
+        in: ['accepted', 'pickup_confirmed', 'active', 'return_initiated']
+      }
+    },
+    select: {
+      id: true,
+      status: true,
+      returnTime: true,
+      borrower: {
+        select: { id: true, firstName: true }
+      }
+    }
+  });
+
   // Get owner's average rating
   const ownerRatings = await prisma.rating.aggregate({
     where: { ratedUserId: item.ownerId },
@@ -179,8 +310,18 @@ async function getItem(req, res) {
     _count: { overallRating: true },
   });
 
+  // Item is effectively unavailable if there's an active transaction
+  const isCurrentlyBorrowed = !!activeTransaction;
+
   res.json({
     ...item,
+    isAvailable: item.isAvailable && !isCurrentlyBorrowed,
+    isCurrentlyBorrowed,
+    activeTransaction: activeTransaction ? {
+      id: activeTransaction.id,
+      status: activeTransaction.status,
+      returnTime: activeTransaction.returnTime,
+    } : null,
     owner: {
       ...item.owner,
       averageRating: ownerRatings._avg.overallRating
@@ -226,7 +367,35 @@ async function updateItem(req, res) {
     isAvailable,
     photoUrls,
     specialInstructions,
+    availableFrom,
+    availableUntil,
+    // New hierarchical category fields
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
+    isOther,
+    customItemName,
+    // Specs/details
+    details,
   } = req.body;
+
+  // Validate specs if provided
+  if (details && details.specs) {
+    const lt = listingType || existingItem.listingType;
+    const t1 = categoryTier1 || existingItem.categoryTier1;
+    const t2 = categoryTier2 || existingItem.categoryTier2;
+    const t3 = categoryTier3 || existingItem.categoryTier3;
+    if (lt && t1 && t2 && t3) {
+      const specDefs = getSpecsForItem(lt, t1, t2, t3);
+      if (specDefs) {
+        const validation = validateLenderSpecs(specDefs, details.specs);
+        if (!validation.valid) {
+          return res.status(400).json({ error: 'Invalid specs', details: validation.errors });
+        }
+      }
+    }
+  }
 
   const item = await prisma.item.update({
     where: { id },
@@ -245,10 +414,20 @@ async function updateItem(req, res) {
       isAvailable,
       photoUrls,
       specialInstructions,
+      availableFrom: availableFrom !== undefined ? (availableFrom ? new Date(availableFrom) : null) : undefined,
+      availableUntil: availableUntil !== undefined ? (availableUntil ? new Date(availableUntil) : null) : undefined,
+      // New hierarchical category fields
+      listingType: listingType !== undefined ? listingType : undefined,
+      categoryTier1: categoryTier1 !== undefined ? categoryTier1 : undefined,
+      categoryTier2: categoryTier2 !== undefined ? categoryTier2 : undefined,
+      categoryTier3: categoryTier3 !== undefined ? categoryTier3 : undefined,
+      isOther: isOther !== undefined ? isOther : undefined,
+      customItemName: customItemName !== undefined ? customItemName : undefined,
+      details: details !== undefined ? details : undefined,
     },
     include: {
       owner: {
-        select: { id: true, fullName: true, neighborhood: true },
+        select: { id: true, firstName: true, lastName: true, neighborhood: true },
       },
     },
   });
