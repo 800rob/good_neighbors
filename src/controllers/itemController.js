@@ -1,6 +1,7 @@
 const prisma = require('../config/database');
 const { calculateDistance } = require('../utils/distance');
 const { getSpecsForItem, validateLenderSpecs } = require('../utils/specUtils');
+const { findRequestsForItem } = require('../utils/matching');
 
 /**
  * Create a new item listing
@@ -77,6 +78,11 @@ async function createItem(req, res) {
         select: { id: true, firstName: true, lastName: true, neighborhood: true },
       },
     },
+  });
+
+  // Reverse-match: find open requests that match this new item (async, don't block response)
+  findRequestsForItem(item.id).catch(err => {
+    console.error('[Matching] Error in reverse matching for item', item.id, err.message);
   });
 
   res.status(201).json(item);

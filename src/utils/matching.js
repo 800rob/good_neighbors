@@ -546,4 +546,207 @@ function calculateMatchScore(request, item, distance, textRelevance, titleMatch,
   return Math.max(0, Math.min(98, Math.round(score)));
 }
 
-module.exports = { findMatchesForRequest, calculateMatchScore, calculateTextRelevance, calculateSpecScore, extractKeywords };
+/**
+ * Reverse matching: find open/matched requests that match a newly listed item
+ * and create Match records + notify both parties.
+ * @param {string} itemId - UUID of the newly created item
+ * @returns {Promise<Array>} Array of created matches
+ */
+async function findRequestsForItem(itemId) {
+  // Get item with owner details
+  const item = await prisma.item.findUnique({
+    where: { id: itemId },
+    include: {
+      owner: {
+        include: {
+          ratingsReceived: {
+            select: { overallRating: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!item || !item.isAvailable) {
+    return [];
+  }
+
+  // Extract keywords from item for filtering
+  const itemKeywords = extractKeywords(item.title + ' ' + (item.description || ''));
+
+  // Find open/matched requests in same category OR matching keywords
+  const requests = await prisma.request.findMany({
+    where: {
+      status: { in: ['open', 'matched'] },
+      requesterId: { not: item.ownerId }, // Don't match own requests
+      OR: [
+        { category: item.category },
+        ...itemKeywords.slice(0, 5).map(keyword => ({
+          title: { contains: keyword, mode: 'insensitive' },
+        })),
+        ...itemKeywords.slice(0, 5).map(keyword => ({
+          description: { contains: keyword, mode: 'insensitive' },
+        })),
+      ],
+    },
+    include: {
+      requester: true,
+      matches: { select: { itemId: true } }, // To check for existing matches
+    },
+  });
+
+  // Load spec defs once based on item's tier3
+  let specDefs = null;
+  if (item.listingType && item.categoryTier1 && item.categoryTier2 && item.categoryTier3) {
+    specDefs = getSpecsForItem(item.listingType, item.categoryTier1, item.categoryTier2, item.categoryTier3);
+  }
+
+  const newMatches = [];
+
+  for (const request of requests) {
+    // Skip if this item is already matched to this request
+    if (request.matches.some(m => m.itemId === item.id)) {
+      continue;
+    }
+
+    // Calculate distance using request location and item owner location
+    const distance = calculateDistance(
+      parseFloat(request.latitude),
+      parseFloat(request.longitude),
+      parseFloat(item.owner.latitude || 0),
+      parseFloat(item.owner.longitude || 0)
+    );
+
+    // Skip if beyond request's max distance
+    if (distance > parseFloat(request.maxDistanceMiles)) {
+      continue;
+    }
+
+    // Skip if price exceeds budget (tier-aware when possible)
+    if (item.priceAmount) {
+      const requestBudgetTiers = request.details?.budgetTiers;
+      const itemPricingType = item.pricingType;
+
+      if (requestBudgetTiers && itemPricingType && itemPricingType !== 'free' && requestBudgetTiers[itemPricingType]) {
+        if (parseFloat(item.priceAmount) > requestBudgetTiers[itemPricingType]) {
+          continue;
+        }
+      } else if (request.maxBudget && parseFloat(item.priceAmount) > parseFloat(request.maxBudget)) {
+        continue;
+      }
+    }
+
+    // Calculate spec score and check hard exclusions
+    // Use request's tier3 for spec defs if item's doesn't match
+    let requestSpecDefs = specDefs;
+    if (!requestSpecDefs && request.listingType && request.categoryTier1 && request.categoryTier2 && request.categoryTier3) {
+      requestSpecDefs = getSpecsForItem(request.listingType, request.categoryTier1, request.categoryTier2, request.categoryTier3);
+    }
+    const specResult = calculateSpecScore(request.details, item.details, requestSpecDefs);
+    if (specResult.excluded) {
+      continue;
+    }
+
+    // Calculate text relevance
+    const { score: textRelevance, titleMatch } = calculateTextRelevance(request, item);
+
+    // Skip items with very low text relevance (unless same category)
+    const sameCategory = item.category === request.category;
+    if (textRelevance < 10 && !sameCategory) {
+      continue;
+    }
+
+    const requestKeywords = extractKeywords(request.title + ' ' + (request.description || ''));
+    if (sameCategory && textRelevance < 5 && requestKeywords.length > 0) {
+      const hasAnyMatch = requestKeywords.some(keyword => {
+        const itemText = (item.title + ' ' + (item.description || '')).toLowerCase();
+        return itemText.includes(keyword);
+      });
+      if (!hasAnyMatch) {
+        continue;
+      }
+    }
+
+    // Calculate match score
+    const matchScore = calculateMatchScore(request, item, distance, textRelevance, titleMatch, specResult.score);
+
+    newMatches.push({
+      requestId: request.id,
+      itemId: item.id,
+      distanceMiles: distance,
+      matchScore,
+      lenderNotified: false,
+      lenderResponse: 'pending',
+    });
+  }
+
+  if (newMatches.length === 0) {
+    return [];
+  }
+
+  // Create all new matches in database
+  await prisma.match.createMany({
+    data: newMatches,
+  });
+
+  // Update any 'open' requests to 'matched'
+  const matchedRequestIds = [...new Set(newMatches.map(m => m.requestId))];
+  await prisma.request.updateMany({
+    where: {
+      id: { in: matchedRequestIds },
+      status: 'open',
+    },
+    data: { status: 'matched' },
+  });
+
+  // Notify both parties for each match
+  const ownerFullName = [item.owner.firstName, item.owner.lastName].filter(Boolean).join(' ');
+  let itemPrice = null;
+  if (item.pricingType === 'free') {
+    itemPrice = 'Free';
+  } else if (item.priceAmount) {
+    itemPrice = `$${item.priceAmount}/${item.pricingType}`;
+  }
+
+  for (const matchData of newMatches) {
+    const request = requests.find(r => r.id === matchData.requestId);
+    if (!request) continue;
+
+    const requesterFullName = [request.requester.firstName, request.requester.lastName].filter(Boolean).join(' ');
+
+    // Notify the item owner (lender): "Your item matched a request"
+    await notifyUser(item.ownerId, 'match_created', {
+      requestId: request.id,
+      itemId: item.id,
+      itemTitle: item.title,
+      itemPrice,
+      requesterId: request.requesterId,
+      requesterName: requesterFullName,
+    });
+
+    // Notify the requester: "A new match was found for your request"
+    await notifyUser(request.requesterId, 'match_created', {
+      requestId: request.id,
+      itemId: item.id,
+      itemTitle: item.title,
+      itemPrice,
+      requesterId: request.requesterId,
+      requesterName: ownerFullName,
+    });
+  }
+
+  // Return created matches with full details
+  return prisma.match.findMany({
+    where: {
+      itemId: item.id,
+      requestId: { in: matchedRequestIds },
+    },
+    include: {
+      item: { include: { owner: true } },
+      request: { include: { requester: true } },
+    },
+    orderBy: { matchScore: 'desc' },
+  });
+}
+
+module.exports = { findMatchesForRequest, findRequestsForItem, calculateMatchScore, calculateTextRelevance, calculateSpecScore, extractKeywords };
