@@ -1,6 +1,8 @@
 const prisma = require('../config/database');
 const { notifyUser } = require('../services/notificationService');
 const { calculateFees } = require('../utils/feeCalculation');
+const { getTaxRate } = require('../utils/taxRates');
+const { hasDateConflict } = require('../utils/dateConflict');
 
 /**
  * Respond to a match (lender accepts or declines)
@@ -52,7 +54,7 @@ async function respondToMatch(req, res) {
       item: {
         include: {
           owner: {
-            select: { id: true, firstName: true, lastName: true, neighborhood: true },
+            select: { id: true, firstName: true, lastName: true, neighborhood: true, state: true },
           },
         },
       },
@@ -87,8 +89,26 @@ async function respondToMatch(req, res) {
     const pickupTime = updatedMatch.request.neededFrom;
     const returnTime = updatedMatch.request.neededUntil;
 
-    // Calculate fees
-    const fees = calculateFees(updatedMatch.item, pickupTime, returnTime, protectionType);
+    // Check for date conflicts with existing bookings
+    const conflict = await hasDateConflict(updatedMatch.item.id, pickupTime, returnTime);
+    if (conflict.hasConflict) {
+      // Revert match response back to pending so it's not stuck as accepted without a transaction
+      await prisma.match.update({
+        where: { id },
+        data: { lenderResponse: 'pending', respondedAt: null },
+      });
+      return res.status(409).json({
+        error: 'This item is already booked during the requested dates',
+        conflictingPeriod: {
+          pickupTime: conflict.conflictingTransaction.pickupTime,
+          returnTime: conflict.conflictingTransaction.returnTime,
+        },
+      });
+    }
+
+    // Calculate fees with tax
+    const taxRate = getTaxRate(updatedMatch.item.owner.state);
+    const fees = calculateFees(updatedMatch.item, pickupTime, returnTime, protectionType, taxRate);
 
     // Create transaction in 'accepted' status (lender's match acceptance IS the approval)
     transaction = await prisma.transaction.create({
@@ -102,6 +122,8 @@ async function respondToMatch(req, res) {
         status: 'accepted',
         rentalFee: fees.rentalFee,
         platformFee: fees.platformFee,
+        taxRate: fees.taxRate,
+        taxAmount: fees.taxAmount,
         protectionType,
         depositAmount: fees.depositAmount,
         insuranceFee: fees.insuranceFee,

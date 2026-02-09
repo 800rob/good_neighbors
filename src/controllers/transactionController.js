@@ -1,6 +1,8 @@
 const prisma = require('../config/database');
 const { notifyUser } = require('../services/notificationService');
 const { calculateFees } = require('../utils/feeCalculation');
+const { getTaxRate } = require('../utils/taxRates');
+const { hasDateConflict } = require('../utils/dateConflict');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -76,8 +78,21 @@ async function createTransaction(req, res) {
     return res.status(400).json({ error: 'Either matchId or itemId is required' });
   }
 
-  // Calculate fees
-  const { rentalFee, platformFee, depositAmount, insuranceFee, totalCharged } = calculateFees(item, pickupTime, returnTime, protectionType);
+  // Check for date conflicts with existing bookings
+  const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+  if (conflict.hasConflict) {
+    return res.status(409).json({
+      error: 'This item is already booked during the requested dates',
+      conflictingPeriod: {
+        pickupTime: conflict.conflictingTransaction.pickupTime,
+        returnTime: conflict.conflictingTransaction.returnTime,
+      },
+    });
+  }
+
+  // Calculate fees with tax
+  const taxRate = getTaxRate(item.owner.state);
+  const fees = calculateFees(item, pickupTime, returnTime, protectionType, taxRate);
 
   const transaction = await prisma.transaction.create({
     data: {
@@ -87,12 +102,14 @@ async function createTransaction(req, res) {
       lenderId: item.ownerId,
       pickupTime: new Date(pickupTime),
       returnTime: new Date(returnTime),
-      rentalFee,
-      platformFee,
+      rentalFee: fees.rentalFee,
+      platformFee: fees.platformFee,
+      taxRate: fees.taxRate,
+      taxAmount: fees.taxAmount,
       protectionType,
-      depositAmount,
-      insuranceFee,
-      totalCharged,
+      depositAmount: fees.depositAmount,
+      insuranceFee: fees.insuranceFee,
+      totalCharged: fees.totalCharged,
     },
     include: {
       item: true,

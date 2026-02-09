@@ -2,6 +2,7 @@ const prisma = require('../config/database');
 const { calculateDistance } = require('./distance');
 const { notifyUser } = require('../services/notificationService');
 const { getSpecsForItem } = require('./specUtils');
+const { getItemIdsWithConflicts, hasDateConflict } = require('./dateConflict');
 
 /**
  * Extract keywords from text (removes common stop words)
@@ -295,9 +296,20 @@ async function findMatchesForRequest(requestId) {
     specDefs = getSpecsForItem(request.listingType, request.categoryTier1, request.categoryTier2, request.categoryTier3);
   }
 
+  // Filter out items with date conflicts (batch query to avoid N+1)
+  let conflictedItemIds = new Set();
+  if (request.neededFrom && request.neededUntil) {
+    const allItemIds = items.map(i => i.id);
+    conflictedItemIds = await getItemIdsWithConflicts(allItemIds, request.neededFrom, request.neededUntil);
+  }
+
   const matches = [];
 
   for (const item of items) {
+    // Skip items with date conflicts
+    if (conflictedItemIds.has(item.id)) {
+      continue;
+    }
     // Calculate distance
     const distance = calculateDistance(
       parseFloat(request.latitude),
@@ -462,6 +474,57 @@ function getTierPriceScore(request, item) {
 }
 
 /**
+ * Estimate the total rental cost for a request duration, picking the cheapest tier.
+ * Returns { cost, tierType } so the caller can look up the matching budget tier.
+ */
+function estimateRentalCost(item, request) {
+  if (!request.neededFrom || !request.neededUntil) {
+    return { cost: parseFloat(item.priceAmount) || 0, tierType: item.pricingType || 'daily' };
+  }
+
+  const pickup = new Date(request.neededFrom);
+  const returnDate = new Date(request.neededUntil);
+  const diffMs = returnDate - pickup;
+  if (diffMs <= 0) return { cost: parseFloat(item.priceAmount) || 0, tierType: item.pricingType || 'daily' };
+
+  const msPerHour = 1000 * 60 * 60;
+  const msPerDay = msPerHour * 24;
+
+  function calcForTier(rate, tierType) {
+    switch (tierType) {
+      case 'hourly': return rate * Math.ceil(diffMs / msPerHour);
+      case 'daily': return rate * Math.max(1, Math.ceil(diffMs / msPerDay));
+      case 'weekly': return rate * Math.max(1, Math.ceil(diffMs / msPerDay / 7));
+      case 'monthly': return rate * Math.max(1, Math.ceil(diffMs / msPerDay / 30));
+      default: return rate;
+    }
+  }
+
+  // Try all pricing tiers and pick the cheapest
+  const tiers = item.details?.pricingTiers;
+  let bestCost = Infinity;
+  let bestTierType = item.pricingType || 'daily';
+
+  if (tiers && typeof tiers === 'object') {
+    for (const [tierType, rate] of Object.entries(tiers)) {
+      if (rate && parseFloat(rate) > 0) {
+        const cost = calcForTier(parseFloat(rate), tierType);
+        if (cost < bestCost) {
+          bestCost = cost;
+          bestTierType = tierType;
+        }
+      }
+    }
+  }
+
+  if (bestCost === Infinity && item.pricingType && item.priceAmount) {
+    bestCost = calcForTier(parseFloat(item.priceAmount), item.pricingType);
+  }
+
+  return { cost: bestCost === Infinity ? 0 : bestCost, tierType: bestTierType };
+}
+
+/**
  * Calculate match score based on various factors
  * @param {object} request - The request object
  * @param {object} item - The item object with owner
@@ -472,21 +535,32 @@ function getTierPriceScore(request, item) {
  * @returns {number} Score from 0-100
  */
 function calculateMatchScore(request, item, distance, textRelevance, titleMatch, specScore = 0) {
-  // EXACT TITLE MATCH = HIGH SCORE (88-95 range)
-  // "Pressure Washer" requesting "Pressure Washer" should be ~90-95%
+  // EXACT TITLE MATCH = HIGH SCORE (85-97 range)
+  // "Pressure Washer" requesting "Pressure Washer" should be ~88-95%
   if (titleMatch) {
-    let score = 88;
+    let score = 85;
 
-    // Add small bonuses for other factors
+    // Category match bonus (up to 2 points)
     if (item.category === request.category) score += 2;
-    if (item.pricingType === 'free') score += 2;
-    else if (item.priceAmount) {
-      const tierScore = getTierPriceScore(request, item);
-      if (tierScore !== null) {
-        // Tier-aware: full 2 points if budget >= price, proportional otherwise
-        score += tierScore >= 1 ? 2 : Math.round(tierScore * 2);
-      } else if (!request.maxBudget || parseFloat(item.priceAmount) <= parseFloat(request.maxBudget)) {
-        score += 1;
+
+    // Price factor (0-8 points) — cheaper = higher score
+    // Uses estimated rental cost for the request duration, normalized against budget.
+    if (item.pricingType === 'free') {
+      score += 8;
+    } else if (item.priceAmount) {
+      const { cost: rentalCost, tierType: bestTier } = estimateRentalCost(item, request);
+      // Use the budget tier that matches the chosen pricing tier
+      const budget = request.details?.budgetTiers?.[bestTier]
+        || parseFloat(request.maxBudget || 0);
+
+      if (budget > 0 && rentalCost > 0) {
+        // Linear 0-8 points: at budget = 0pts, at $0 = 8pts
+        const fraction = Math.min(1, rentalCost / budget);
+        score += 8 * (1 - fraction);
+      } else if (rentalCost > 0) {
+        score += Math.max(0, 8 * (1 - rentalCost / 500));
+      } else {
+        score += 4;
       }
     }
 
@@ -502,8 +576,9 @@ function calculateMatchScore(request, item, distance, textRelevance, titleMatch,
     const distancePenalty = Math.min(3, (distance / maxDistance) * 3);
     score -= distancePenalty;
 
-    // Cap exact matches at 95% - 100% should be impossible
-    return Math.max(85, Math.min(95, Math.round(score)));
+    // Cap exact matches at 97% - 100% should be impossible
+    // Use 1 decimal place to preserve price differentiation
+    return Math.max(85, Math.min(97, Math.round(score * 10) / 10));
   }
 
   // For non-exact matches, use weighted scoring
@@ -625,6 +700,14 @@ async function findRequestsForItem(itemId) {
     // Skip if this item is already matched to this request
     if (request.matches.some(m => m.itemId === item.id)) {
       continue;
+    }
+
+    // Skip if the request's date range conflicts with an existing booking on this item
+    if (request.neededFrom && request.neededUntil) {
+      const conflict = await hasDateConflict(item.id, request.neededFrom, request.neededUntil);
+      if (conflict.hasConflict) {
+        continue;
+      }
     }
 
     // Calculate distance using request location and item owner location

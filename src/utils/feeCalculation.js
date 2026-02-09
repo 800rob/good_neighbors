@@ -46,9 +46,10 @@ function calculateRentalFeeForTier(rate, tierType, pickup, returnDate) {
  * @param {Date|string} pickupTime - Pickup date/time
  * @param {Date|string} returnTime - Return date/time
  * @param {string} protectionType - 'waiver' | 'insurance' | 'deposit'
- * @returns {{ rentalFee: number, platformFee: number, depositAmount: number|null, insuranceFee: number|null, totalCharged: number, chosenTier: string, chosenRate: number }}
+ * @param {number} [taxRate=0] - Sales tax rate as decimal (e.g. 0.029 for 2.9%)
+ * @returns {{ rentalFee: number, platformFee: number, borrowerPlatformFee: number, lenderPlatformFee: number, taxRate: number, taxAmount: number, depositAmount: number|null, insuranceFee: number|null, totalCharged: number, chosenTier: string, chosenRate: number }}
  */
-function calculateFees(item, pickupTime, returnTime, protectionType) {
+function calculateFees(item, pickupTime, returnTime, protectionType, taxRate = 0) {
   const pickup = new Date(pickupTime);
   const returnDate = new Date(returnTime);
 
@@ -86,8 +87,13 @@ function calculateFees(item, pickupTime, returnTime, protectionType) {
 
   const rentalFee = bestRentalFee === Infinity ? 0 : bestRentalFee;
 
-  // Platform fee: $1 + 3% of rental fee
+  // Platform fee: $1 + 3% of rental fee (full amount, split 50/50)
   const platformFee = 1 + (rentalFee * 0.03);
+  const borrowerPlatformFee = platformFee / 2;
+  const lenderPlatformFee = platformFee / 2;
+
+  // Sales tax on the rental fee
+  const taxAmount = parseFloat((rentalFee * taxRate).toFixed(2));
 
   // Calculate protection costs
   let depositAmount = null;
@@ -100,10 +106,14 @@ function calculateFees(item, pickupTime, returnTime, protectionType) {
     insuranceFee = parseFloat(item.replacementValue) * 0.05;
   }
 
-  // Total charged
-  const totalCharged = rentalFee + platformFee + (insuranceFee || 0) + (depositAmount || 0);
+  // Total charged = what the BORROWER actually pays
+  const totalCharged = rentalFee + borrowerPlatformFee + taxAmount + (insuranceFee || 0) + (depositAmount || 0);
 
-  return { rentalFee, platformFee, depositAmount, insuranceFee, totalCharged, chosenTier, chosenRate };
+  return {
+    rentalFee, platformFee, borrowerPlatformFee, lenderPlatformFee,
+    taxRate, taxAmount, depositAmount, insuranceFee,
+    totalCharged, chosenTier, chosenRate,
+  };
 }
 
 module.exports = { calculateFees };

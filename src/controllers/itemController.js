@@ -2,6 +2,7 @@ const prisma = require('../config/database');
 const { calculateDistance } = require('../utils/distance');
 const { getSpecsForItem, validateLenderSpecs } = require('../utils/specUtils');
 const { findRequestsForItem } = require('../utils/matching');
+const { BLOCKING_STATUSES, getBookedPeriods } = require('../utils/dateConflict');
 
 /**
  * Create a new item listing
@@ -125,16 +126,28 @@ async function getItems(req, res) {
     where.ownerId = { not: req.user.id };
   }
 
-  // Exclude items that are currently being lent (have active transactions)
-  where.NOT = {
-    transactions: {
-      some: {
-        status: {
-          in: ['accepted', 'pickup_confirmed', 'active', 'return_initiated']
+  // Exclude items with booking conflicts
+  if (availableFrom && availableUntil) {
+    // Date-aware: only exclude items with transactions overlapping the requested range
+    where.NOT = {
+      transactions: {
+        some: {
+          status: { in: BLOCKING_STATUSES },
+          pickupTime: { lt: new Date(availableUntil) },
+          returnTime: { gt: new Date(availableFrom) },
         }
       }
-    }
-  };
+    };
+  } else {
+    // No dates specified: exclude items with ANY active transaction (original behavior)
+    where.NOT = {
+      transactions: {
+        some: {
+          status: { in: BLOCKING_STATUSES }
+        }
+      }
+    };
+  }
 
   // Legacy category filter (backward compatibility)
   if (category) where.category = category;
@@ -277,6 +290,7 @@ async function getItem(req, res) {
           firstName: true,
           lastName: true,
           neighborhood: true,
+          state: true,
           latitude: true,
           longitude: true,
           profilePhotoUrl: true,
@@ -309,6 +323,9 @@ async function getItem(req, res) {
     }
   });
 
+  // Get booked periods for calendar display
+  const bookedPeriods = await getBookedPeriods(id);
+
   // Get owner's average rating
   const ownerRatings = await prisma.rating.aggregate({
     where: { ratedUserId: item.ownerId },
@@ -328,6 +345,7 @@ async function getItem(req, res) {
       status: activeTransaction.status,
       returnTime: activeTransaction.returnTime,
     } : null,
+    bookedPeriods,
     owner: {
       ...item.owner,
       averageRating: ownerRatings._avg.overallRating

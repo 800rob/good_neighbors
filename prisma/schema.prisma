@@ -253,7 +253,7 @@ model Match {
   requestId       String        @map("request_id") @db.Uuid
   itemId          String        @map("item_id") @db.Uuid
   distanceMiles   Decimal       @map("distance_miles") @db.Decimal(6, 2)
-  matchScore      Int           @map("match_score")
+  matchScore      Decimal       @map("match_score") @db.Decimal(4, 1)
   lenderNotified  Boolean       @default(false) @map("lender_notified")
   lenderResponse  MatchResponse @default(pending) @map("lender_response")
   respondedAt     DateTime?     @map("responded_at")
@@ -286,6 +286,8 @@ model Transaction {
   protectionType   ProtectionType    @map("protection_type")
   depositAmount    Decimal?          @map("deposit_amount") @db.Decimal(10, 2)
   insuranceFee     Decimal?          @map("insurance_fee") @db.Decimal(10, 2)
+  taxRate          Decimal?          @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount        Decimal?          @map("tax_amount") @db.Decimal(10, 2)
   totalCharged     Decimal           @map("total_charged") @db.Decimal(10, 2)
   lateFeeCharged   Decimal?          @map("late_fee_charged") @db.Decimal(10, 2)
   paymentStatus    PaymentStatus     @default(pending) @map("payment_status")

@@ -110,7 +110,10 @@ async function getRequest(req, res) {
           item: {
             include: {
               owner: {
-                select: { id: true, firstName: true, lastName: true, neighborhood: true },
+                select: {
+                  id: true, firstName: true, lastName: true, neighborhood: true, state: true,
+                  ratingsReceived: { select: { overallRating: true } },
+                },
               },
             },
           },
@@ -125,6 +128,20 @@ async function getRequest(req, res) {
 
   if (!request) {
     return res.status(404).json({ error: 'Request not found' });
+  }
+
+  // Compute averageRating for each match's item owner
+  if (request.matches) {
+    for (const match of request.matches) {
+      if (match.item?.owner?.ratingsReceived) {
+        const ratings = match.item.owner.ratingsReceived;
+        match.item.owner.averageRating = ratings.length > 0
+          ? parseFloat((ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length).toFixed(2))
+          : null;
+        match.item.owner.totalRatings = ratings.length;
+        delete match.item.owner.ratingsReceived;
+      }
+    }
   }
 
   res.json(request);
@@ -228,6 +245,7 @@ async function getRequestMatches(req, res) {
               firstName: true,
               lastName: true,
               neighborhood: true,
+              state: true,
               profilePhotoUrl: true,
               latitude: true,
               longitude: true,
