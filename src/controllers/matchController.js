@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const { notifyUser } = require('../services/notificationService');
+const { calculateFees } = require('../utils/feeCalculation');
 
 /**
  * Respond to a match (lender accepts or declines)
@@ -65,30 +66,89 @@ async function respondToMatch(req, res) {
     },
   });
 
-  // If accepted, update request status
+  // If accepted, update request status and auto-create transaction
+  let transaction = null;
   if (response === 'accepted') {
     await prisma.request.update({
       where: { id: match.requestId },
       data: { status: 'accepted' },
     });
+
+    // Determine protection type from item's protectionPreference
+    const pref = updatedMatch.item.protectionPreference;
+    let protectionType = 'waiver';
+    if (pref === 'insurance_required') {
+      protectionType = 'insurance';
+    } else if (pref === 'deposit_required') {
+      protectionType = 'deposit';
+    }
+
+    // Use request's neededFrom/neededUntil as pickup/return times
+    const pickupTime = updatedMatch.request.neededFrom;
+    const returnTime = updatedMatch.request.neededUntil;
+
+    // Calculate fees
+    const fees = calculateFees(updatedMatch.item, pickupTime, returnTime, protectionType);
+
+    // Create transaction in 'accepted' status (lender's match acceptance IS the approval)
+    transaction = await prisma.transaction.create({
+      data: {
+        requestId: updatedMatch.requestId,
+        itemId: updatedMatch.item.id,
+        borrowerId: updatedMatch.request.requesterId,
+        lenderId: updatedMatch.item.ownerId,
+        pickupTime: new Date(pickupTime),
+        returnTime: new Date(returnTime),
+        status: 'accepted',
+        rentalFee: fees.rentalFee,
+        platformFee: fees.platformFee,
+        protectionType,
+        depositAmount: fees.depositAmount,
+        insuranceFee: fees.insuranceFee,
+        totalCharged: fees.totalCharged,
+      },
+      include: {
+        item: true,
+        borrower: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        lender: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
   }
 
   // Notify the requester (borrower) of the response
-  const notificationType = response === 'accepted' ? 'match_accepted' : 'match_declined';
   const lenderFullName = [updatedMatch.item.owner.firstName, updatedMatch.item.owner.lastName].filter(Boolean).join(' ');
-  await notifyUser(updatedMatch.request.requesterId, notificationType, {
-    matchId: updatedMatch.id,
-    itemId: updatedMatch.item.id,
-    itemTitle: updatedMatch.item.title,
-    lenderId: updatedMatch.item.owner.id,
-    lenderName: lenderFullName,
-    requestId: updatedMatch.requestId,
-  });
+
+  if (response === 'accepted' && transaction) {
+    // Send transaction_accepted notification so borrower goes directly to the transaction
+    await notifyUser(updatedMatch.request.requesterId, 'transaction_accepted', {
+      transactionId: transaction.id,
+      matchId: updatedMatch.id,
+      itemId: updatedMatch.item.id,
+      itemTitle: updatedMatch.item.title,
+      lenderId: updatedMatch.item.owner.id,
+      lenderName: lenderFullName,
+      requestId: updatedMatch.requestId,
+    });
+  } else {
+    await notifyUser(updatedMatch.request.requesterId, 'match_declined', {
+      matchId: updatedMatch.id,
+      itemId: updatedMatch.item.id,
+      itemTitle: updatedMatch.item.title,
+      lenderId: updatedMatch.item.owner.id,
+      lenderName: lenderFullName,
+      requestId: updatedMatch.requestId,
+    });
+  }
 
   res.json({
     match: updatedMatch,
+    transaction,
     message: response === 'accepted'
-      ? 'Match accepted! The borrower can now create a transaction.'
+      ? 'Match accepted! A transaction has been created.'
       : 'Match declined.',
   });
 }

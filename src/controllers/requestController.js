@@ -117,6 +117,9 @@ async function getRequest(req, res) {
         },
         orderBy: { matchScore: 'desc' },
       },
+      transactions: {
+        select: { id: true, itemId: true, status: true },
+      },
     },
   });
 

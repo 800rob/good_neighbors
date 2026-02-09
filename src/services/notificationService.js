@@ -7,6 +7,11 @@ const NOTIFICATION_TYPES = {
     defaultEmail: true,
     defaultSms: false,
   },
+  match_found: {
+    defaultInApp: true,
+    defaultEmail: true,
+    defaultSms: false,
+  },
   match_accepted: {
     defaultInApp: true,
     defaultEmail: true,
@@ -104,6 +109,12 @@ function getNotificationContent(type, context) {
       message: context.itemPrice
         ? `Your item "${context.itemTitle}" (${context.itemPrice}) matches a request from ${context.requesterName}!`
         : `Your item "${context.itemTitle}" matches a request from ${context.requesterName}!`,
+    },
+    match_found: {
+      title: 'Match Found for Your Request',
+      message: context.matchCount > 1
+        ? `${context.matchCount} items match your request "${context.requestTitle}"! Review them now.`
+        : `"${context.itemTitle}" matches your request "${context.requestTitle}"! Review it now.`,
     },
     match_accepted: {
       title: 'Match Accepted',
@@ -317,6 +328,7 @@ function getAllNotificationTypes() {
 function getNotificationTypeDescription(type) {
   const descriptions = {
     match_created: 'New match found for your request or item',
+    match_found: 'Matches found for your request',
     match_accepted: 'Lender accepted your match request',
     match_declined: 'Lender declined your match request',
     transaction_requested: 'Someone wants to borrow your item',

@@ -403,6 +403,24 @@ async function findMatchesForRequest(requestId) {
         });
       }
     }
+
+    // Notify the borrower (requester) that matches were found
+    const topMatch = items.find(i => i.id === matches[0]?.itemId);
+    let topItemPrice = null;
+    if (topMatch?.pricingType === 'free') {
+      topItemPrice = 'Free';
+    } else if (topMatch?.priceAmount) {
+      topItemPrice = `$${topMatch.priceAmount}/${topMatch.pricingType}`;
+    }
+
+    await notifyUser(request.requesterId, 'match_found', {
+      requestId: request.id,
+      requestTitle: request.title,
+      matchCount: matches.length,
+      itemId: topMatch?.id,
+      itemTitle: topMatch?.title,
+      itemPrice: topItemPrice,
+    });
   }
 
   // Return created matches with full details
@@ -725,13 +743,13 @@ async function findRequestsForItem(itemId) {
     });
 
     // Notify the requester: "A new match was found for your request"
-    await notifyUser(request.requesterId, 'match_created', {
+    await notifyUser(request.requesterId, 'match_found', {
       requestId: request.id,
+      requestTitle: request.title,
+      matchCount: 1,
       itemId: item.id,
       itemTitle: item.title,
       itemPrice,
-      requesterId: request.requesterId,
-      requesterName: ownerFullName,
     });
   }
 

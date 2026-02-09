@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const { notifyUser } = require('../services/notificationService');
+const { calculateFees } = require('../utils/feeCalculation');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -76,40 +77,7 @@ async function createTransaction(req, res) {
   }
 
   // Calculate fees
-  const pickup = new Date(pickupTime);
-  const returnDate = new Date(returnTime);
-  const durationDays = Math.ceil((returnDate - pickup) / (1000 * 60 * 60 * 24));
-
-  let rentalFee = 0;
-  if (item.pricingType === 'daily' && item.priceAmount) {
-    rentalFee = parseFloat(item.priceAmount) * durationDays;
-  } else if (item.pricingType === 'hourly' && item.priceAmount) {
-    const durationHours = Math.ceil((returnDate - pickup) / (1000 * 60 * 60));
-    rentalFee = parseFloat(item.priceAmount) * durationHours;
-  } else if (item.pricingType === 'weekly' && item.priceAmount) {
-    const durationWeeks = Math.ceil(durationDays / 7);
-    rentalFee = parseFloat(item.priceAmount) * durationWeeks;
-  } else if (item.pricingType === 'monthly' && item.priceAmount) {
-    const durationMonths = Math.ceil(durationDays / 30);
-    rentalFee = parseFloat(item.priceAmount) * durationMonths;
-  }
-
-  // Platform fee: $1 + 3% of rental fee
-  const platformFee = 1 + (rentalFee * 0.03);
-
-  // Calculate protection costs
-  let depositAmount = null;
-  let insuranceFee = null;
-
-  if (protectionType === 'deposit') {
-    depositAmount = parseFloat(item.replacementValue) * (item.depositPercentage / 100);
-  } else if (protectionType === 'insurance') {
-    // Insurance fee: 5% of replacement value
-    insuranceFee = parseFloat(item.replacementValue) * 0.05;
-  }
-
-  // Total charged
-  const totalCharged = rentalFee + platformFee + (insuranceFee || 0) + (depositAmount || 0);
+  const { rentalFee, platformFee, depositAmount, insuranceFee, totalCharged } = calculateFees(item, pickupTime, returnTime, protectionType);
 
   const transaction = await prisma.transaction.create({
     data: {
@@ -117,8 +85,8 @@ async function createTransaction(req, res) {
       itemId: item.id,
       borrowerId: req.user.id,
       lenderId: item.ownerId,
-      pickupTime: pickup,
-      returnTime: returnDate,
+      pickupTime: new Date(pickupTime),
+      returnTime: new Date(returnTime),
       rentalFee,
       platformFee,
       protectionType,
