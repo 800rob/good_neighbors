@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const {
   createTransaction,
   getTransaction,
@@ -49,13 +49,20 @@ router.post(
 );
 
 // GET /api/transactions/:id
-router.get('/:id', authenticate, asyncHandler(getTransaction));
+router.get(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid transaction ID')],
+  handleValidationErrors,
+  asyncHandler(getTransaction)
+);
 
 // PUT /api/transactions/:id/status
 router.put(
   '/:id/status',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
     body('status')
       .isIn(TRANSACTION_STATUSES)
       .withMessage('Invalid status'),
@@ -74,6 +81,7 @@ router.put(
   '/:id/dispute',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
     body('disputeReason')
       .trim()
       .notEmpty()
@@ -89,6 +97,7 @@ router.post(
   '/:id/messages',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
     body('messageText').trim().notEmpty().withMessage('Message text is required'),
     body('photoUrl').optional().isURL().withMessage('Invalid photo URL'),
   ],
@@ -97,7 +106,13 @@ router.post(
 );
 
 // GET /api/transactions/:id/messages
-router.get('/:id/messages', authenticate, asyncHandler(getMessages));
+router.get(
+  '/:id/messages',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid transaction ID')],
+  handleValidationErrors,
+  asyncHandler(getMessages)
+);
 
 // Ratings
 // POST /api/transactions/:id/rating
@@ -105,6 +120,7 @@ router.post(
   '/:id/rating',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
     body('overallRating')
       .isInt({ min: 1, max: 5 })
       .withMessage('Overall rating must be 1-5'),
@@ -134,6 +150,12 @@ router.post(
 );
 
 // GET /api/transactions/:id/ratings
-router.get('/:id/ratings', authenticate, asyncHandler(getTransactionRatings));
+router.get(
+  '/:id/ratings',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid transaction ID')],
+  handleValidationErrors,
+  asyncHandler(getTransactionRatings)
+);
 
 module.exports = router;

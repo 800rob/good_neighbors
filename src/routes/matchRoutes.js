@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const { respondToMatch, getIncomingMatches } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
@@ -15,6 +15,7 @@ router.put(
   '/:id/respond',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid match ID'),
     body('response')
       .isIn(['accepted', 'declined'])
       .withMessage('Response must be "accepted" or "declined"'),

@@ -44,49 +44,76 @@ async function submitRating(req, res) {
     return res.status(400).json({ error: 'Can only rate after transaction is completed' });
   }
 
-  // Check if user already rated this transaction
-  const existingRating = await prisma.rating.findUnique({
-    where: {
-      unique_rating_per_transaction_per_rater: {
-        transactionId,
-        raterId: req.user.id,
-      },
-    },
-  });
-
-  if (existingRating) {
-    return res.status(400).json({ error: 'You have already rated this transaction' });
-  }
-
   // Determine who is being rated and their role
   const ratedUserId = isBorrower ? transaction.lenderId : transaction.borrowerId;
   const role = isBorrower ? 'lender' : 'borrower'; // Role of the person being rated
 
-  const rating = await prisma.rating.create({
-    data: {
-      transactionId,
-      raterId: req.user.id,
-      ratedUserId,
-      role,
-      overallRating,
-      onTimeRating,
-      communicationRating,
-      conditionRating: isLender ? conditionRating : null, // Lender rates borrower's condition return
-      itemAsDescribedRating: isBorrower ? itemAsDescribedRating : null, // Borrower rates if item was as described
-      reviewText,
-      wouldTransactAgain: wouldTransactAgain ?? true,
-    },
-    include: {
-      ratedUser: {
-        select: { id: true, firstName: true, lastName: true },
+  // Wrap duplicate check + create + count + auto-complete in a transaction
+  const rating = await prisma.$transaction(async (tx) => {
+    // Check if user already rated this transaction (inside transaction to prevent race)
+    const existingRating = await tx.rating.findUnique({
+      where: {
+        unique_rating_per_transaction_per_rater: {
+          transactionId,
+          raterId: req.user.id,
+        },
       },
-      rater: {
-        select: { id: true, firstName: true, lastName: true },
+    });
+
+    if (existingRating) {
+      const err = new Error('You have already rated this transaction');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const created = await tx.rating.create({
+      data: {
+        transactionId,
+        raterId: req.user.id,
+        ratedUserId,
+        role,
+        overallRating,
+        onTimeRating,
+        communicationRating,
+        conditionRating: isLender ? conditionRating : null,
+        itemAsDescribedRating: isBorrower ? itemAsDescribedRating : null,
+        reviewText,
+        wouldTransactAgain: wouldTransactAgain ?? true,
       },
-    },
+      include: {
+        ratedUser: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        rater: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+    });
+
+    // Check if both parties have rated, if so mark transaction as completed
+    const ratingsCount = await tx.rating.count({
+      where: { transactionId },
+    });
+
+    if (ratingsCount === 2 && transaction.status !== 'completed') {
+      await tx.transaction.update({
+        where: { id: transactionId },
+        data: { status: 'completed' },
+      });
+    }
+
+    return created;
+  }).catch((err) => {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
   });
 
-  // Notify the rated user
+  // If response already sent (duplicate rating), stop
+  if (res.headersSent) return;
+
+  // Notifications sent outside the transaction (idempotent)
   const raterFullName = [rating.rater.firstName, rating.rater.lastName].filter(Boolean).join(' ');
   await notifyUser(ratedUserId, 'rating_received', {
     transactionId,
@@ -95,18 +122,6 @@ async function submitRating(req, res) {
     raterId: req.user.id,
     raterName: raterFullName,
   });
-
-  // Check if both parties have rated, if so mark transaction as completed
-  const ratingsCount = await prisma.rating.count({
-    where: { transactionId },
-  });
-
-  if (ratingsCount === 2 && transaction.status !== 'completed') {
-    await prisma.transaction.update({
-      where: { id: transactionId },
-      data: { status: 'completed' },
-    });
-  }
 
   res.status(201).json(rating);
 }

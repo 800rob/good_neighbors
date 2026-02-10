@@ -255,21 +255,18 @@ async function sendApprovalReminders() {
       const borrowerName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
 
       // Check if we already sent a reminder recently (avoid spamming)
-      const recentNotification = await prisma.notification.findFirst({
+      const recentNotifications = await prisma.notification.findMany({
         where: {
           userId: transaction.lenderId,
           type: 'approval_reminder',
-          createdAt: {
-            gt: twelveHoursAgo
-          },
-          data: {
-            path: ['transactionId'],
-            equals: transaction.id
-          }
-        }
+          createdAt: { gt: twelveHoursAgo },
+        },
       });
+      const alreadySent = recentNotifications.some(
+        n => n.data?.transactionId === transaction.id
+      );
 
-      if (recentNotification) continue;
+      if (alreadySent) continue;
 
       await notifyUser(transaction.lenderId, 'approval_reminder', {
         transactionId: transaction.id,
@@ -317,21 +314,18 @@ async function sendRequestExpiringReminders() {
   for (const request of expiringRequests) {
     try {
       // Check if we already sent a reminder
-      const recentNotification = await prisma.notification.findFirst({
+      const recentNotifications = await prisma.notification.findMany({
         where: {
           userId: request.requesterId,
           type: 'request_expiring',
-          createdAt: {
-            gt: in23Hours
-          },
-          data: {
-            path: ['requestId'],
-            equals: request.id
-          }
-        }
+          createdAt: { gt: in23Hours },
+        },
       });
+      const alreadySent = recentNotifications.some(
+        n => n.data?.requestId === request.id
+      );
 
-      if (recentNotification) continue;
+      if (alreadySent) continue;
 
       await notifyUser(request.requesterId, 'request_expiring', {
         requestId: request.id,

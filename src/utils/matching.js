@@ -333,9 +333,12 @@ async function findMatchesForRequest(requestId) {
         if (parseFloat(item.priceAmount) > requestBudgetTiers[itemPricingType]) {
           continue;
         }
-      } else if (request.maxBudget && parseFloat(item.priceAmount) > parseFloat(request.maxBudget)) {
-        // Fallback: old maxBudget comparison for requests without budgetTiers
-        continue;
+      } else if (request.maxBudget) {
+        // Fallback: use estimated rental cost for the full duration
+        const { cost: totalCost } = estimateRentalCost(item, request);
+        if (totalCost > parseFloat(request.maxBudget)) {
+          continue;
+        }
       }
     }
 
@@ -739,8 +742,12 @@ async function findRequestsForItem(itemId) {
         if (parseFloat(item.priceAmount) > requestBudgetTiers[itemPricingType]) {
           continue;
         }
-      } else if (request.maxBudget && parseFloat(item.priceAmount) > parseFloat(request.maxBudget)) {
-        continue;
+      } else if (request.maxBudget) {
+        // Fallback: use estimated rental cost for the full duration
+        const { cost: totalCost } = estimateRentalCost(item, request);
+        if (totalCost > parseFloat(request.maxBudget)) {
+          continue;
+        }
       }
     }
 

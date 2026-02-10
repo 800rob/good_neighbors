@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const {
   createRequest,
   getRequest,
@@ -59,8 +59,24 @@ router.post(
   [
     body('category').isIn(CATEGORIES).withMessage('Invalid category'),
     body('title').trim().notEmpty().withMessage('Title is required'),
-    body('neededFrom').isISO8601().withMessage('Valid start date is required'),
-    body('neededUntil').isISO8601().withMessage('Valid end date is required'),
+    body('neededFrom')
+      .isISO8601()
+      .withMessage('Valid start date is required')
+      .custom((value) => {
+        if (new Date(value) < new Date()) {
+          throw new Error('Start date cannot be in the past');
+        }
+        return true;
+      }),
+    body('neededUntil')
+      .isISO8601()
+      .withMessage('Valid end date is required')
+      .custom((value, { req }) => {
+        if (new Date(value) <= new Date(req.body.neededFrom)) {
+          throw new Error('End date must be after start date');
+        }
+        return true;
+      }),
     body('maxBudget')
       .optional()
       .isFloat({ min: 0 })
@@ -77,12 +93,30 @@ router.post(
 );
 
 // GET /api/requests/:id
-router.get('/:id', authenticate, asyncHandler(getRequest));
+router.get(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid request ID')],
+  handleValidationErrors,
+  asyncHandler(getRequest)
+);
 
 // PUT /api/requests/:id/cancel
-router.put('/:id/cancel', authenticate, asyncHandler(cancelRequest));
+router.put(
+  '/:id/cancel',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid request ID')],
+  handleValidationErrors,
+  asyncHandler(cancelRequest)
+);
 
 // GET /api/requests/:id/matches
-router.get('/:id/matches', authenticate, asyncHandler(getRequestMatches));
+router.get(
+  '/:id/matches',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid request ID')],
+  handleValidationErrors,
+  asyncHandler(getRequestMatches)
+);
 
 module.exports = router;

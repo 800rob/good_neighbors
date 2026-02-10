@@ -169,17 +169,19 @@ async function getItems(req, res) {
     }
   }
 
+  // Use AND array for all optional filters to avoid OR/AND conflicts
+  where.AND = where.AND || [];
+
   // Filter by availability dates
-  // Item is available if: no availableFrom set OR availableFrom <= requested date
-  // Item is available if: no availableUntil set OR availableUntil >= requested date
   if (availableFrom) {
-    where.OR = [
-      { availableFrom: null },
-      { availableFrom: { lte: new Date(availableFrom) } }
-    ];
+    where.AND.push({
+      OR: [
+        { availableFrom: null },
+        { availableFrom: { lte: new Date(availableFrom) } }
+      ]
+    });
   }
   if (availableUntil) {
-    where.AND = where.AND || [];
     where.AND.push({
       OR: [
         { availableUntil: null },
@@ -190,22 +192,17 @@ async function getItems(req, res) {
 
   // Keyword search in title and description
   if (search) {
-    const searchCondition = {
+    where.AND.push({
       OR: [
         { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
       ]
-    };
-    if (where.AND) {
-      where.AND.push(searchCondition);
-    } else if (where.OR) {
-      // If we already have OR for availableFrom, we need to restructure
-      const existingOr = where.OR;
-      delete where.OR;
-      where.AND = [{ OR: existingOr }, searchCondition];
-    } else {
-      where.OR = searchCondition.OR;
-    }
+    });
+  }
+
+  // Clean up empty AND array
+  if (where.AND.length === 0) {
+    delete where.AND;
   }
 
   if (minPrice || maxPrice) {

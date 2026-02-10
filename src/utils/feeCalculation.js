@@ -88,9 +88,10 @@ function calculateFees(item, pickupTime, returnTime, protectionType, taxRate = 0
   const rentalFee = bestRentalFee === Infinity ? 0 : bestRentalFee;
 
   // Platform fee: $1 + 3% of rental fee (full amount, split 50/50)
-  const platformFee = 1 + (rentalFee * 0.03);
-  const borrowerPlatformFee = platformFee / 2;
-  const lenderPlatformFee = platformFee / 2;
+  const platformFee = parseFloat((1 + (rentalFee * 0.03)).toFixed(2));
+  const borrowerPlatformFee = parseFloat((platformFee / 2).toFixed(2));
+  // Derive lender fee from total to avoid penny discrepancies
+  const lenderPlatformFee = parseFloat((platformFee - borrowerPlatformFee).toFixed(2));
 
   // Sales tax on the rental fee
   const taxAmount = parseFloat((rentalFee * taxRate).toFixed(2));
@@ -100,14 +101,14 @@ function calculateFees(item, pickupTime, returnTime, protectionType, taxRate = 0
   let insuranceFee = null;
 
   if (protectionType === 'deposit') {
-    depositAmount = parseFloat(item.replacementValue) * (item.depositPercentage / 100);
+    depositAmount = parseFloat((parseFloat(item.replacementValue) * (item.depositPercentage / 100)).toFixed(2));
   } else if (protectionType === 'insurance') {
     // Insurance fee: 5% of replacement value
-    insuranceFee = parseFloat(item.replacementValue) * 0.05;
+    insuranceFee = parseFloat((parseFloat(item.replacementValue) * 0.05).toFixed(2));
   }
 
   // Total charged = what the BORROWER actually pays
-  const totalCharged = rentalFee + borrowerPlatformFee + taxAmount + (insuranceFee || 0) + (depositAmount || 0);
+  const totalCharged = parseFloat((rentalFee + borrowerPlatformFee + taxAmount + (insuranceFee || 0) + (depositAmount || 0)).toFixed(2));
 
   return {
     rentalFee, platformFee, borrowerPlatformFee, lenderPlatformFee,

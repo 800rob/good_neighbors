@@ -316,6 +316,9 @@ model Transaction {
   @@index([status, createdAt], name: "idx_transaction_status_created")
   @@index([borrowerId, status], name: "idx_transaction_borrower_status")
   @@index([lenderId, status], name: "idx_transaction_lender_status")
+  @@index([status, returnTime], name: "idx_transaction_status_return")
+  @@index([status, returnReminderSent], name: "idx_transaction_status_reminder")
+  @@index([status, overdueNotificationSent], name: "idx_transaction_status_overdue")
   @@map("transactions")
 }
 
@@ -385,6 +388,7 @@ model Rating {
   @@unique([transactionId, raterId], name: "unique_rating_per_transaction_per_rater")
   @@index([transactionId], name: "idx_rating_transaction")
   @@index([ratedUserId], name: "idx_rating_rated_user")
+  @@index([ratedUserId, role], name: "idx_rating_rated_user_role")
   @@map("ratings")
 }
 
@@ -424,5 +428,6 @@ model Notification {
 
   @@index([userId, isRead], name: "idx_notification_user_read")
   @@index([userId, createdAt], name: "idx_notification_user_created")
+  @@index([userId, type, createdAt], name: "idx_notification_user_type_created")
   @@map("notifications")
 }

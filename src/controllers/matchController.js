@@ -72,14 +72,9 @@ async function respondToMatch(req, res) {
     },
   });
 
-  // If accepted, update request status and auto-create transaction
+  // If accepted, wrap date conflict re-check + request update + transaction creation in a transaction
   let transaction = null;
   if (response === 'accepted') {
-    await prisma.request.update({
-      where: { id: match.requestId },
-      data: { status: 'accepted' },
-    });
-
     // Determine protection type from item's protectionPreference
     const pref = updatedMatch.item.protectionPreference;
     let protectionType = 'waiver';
@@ -93,56 +88,74 @@ async function respondToMatch(req, res) {
     const pickupTime = updatedMatch.request.neededFrom;
     const returnTime = updatedMatch.request.neededUntil;
 
-    // Check for date conflicts with existing bookings
-    const conflict = await hasDateConflict(updatedMatch.item.id, pickupTime, returnTime);
-    if (conflict.hasConflict) {
-      // Revert match response back to pending so it's not stuck as accepted without a transaction
-      await prisma.match.update({
-        where: { id },
-        data: { lenderResponse: 'pending', respondedAt: null },
+    try {
+      transaction = await prisma.$transaction(async (tx) => {
+        // Re-check date conflicts inside the transaction
+        const conflict = await hasDateConflict(updatedMatch.item.id, pickupTime, returnTime);
+        if (conflict.hasConflict) {
+          // Revert match response back to pending
+          await tx.match.update({
+            where: { id },
+            data: { lenderResponse: 'pending', respondedAt: null },
+          });
+          const err = new Error('This item is already booked during the requested dates');
+          err.statusCode = 409;
+          err.conflictingPeriod = {
+            pickupTime: conflict.conflictingTransaction.pickupTime,
+            returnTime: conflict.conflictingTransaction.returnTime,
+          };
+          throw err;
+        }
+
+        // Update request status
+        await tx.request.update({
+          where: { id: match.requestId },
+          data: { status: 'accepted' },
+        });
+
+        // Calculate fees with tax
+        const taxRate = getTaxRate(updatedMatch.item.owner.state);
+        const fees = calculateFees(updatedMatch.item, pickupTime, returnTime, protectionType, taxRate);
+
+        // Create transaction in 'accepted' status
+        return tx.transaction.create({
+          data: {
+            requestId: updatedMatch.requestId,
+            itemId: updatedMatch.item.id,
+            borrowerId: updatedMatch.request.requesterId,
+            lenderId: updatedMatch.item.ownerId,
+            pickupTime: new Date(pickupTime),
+            returnTime: new Date(returnTime),
+            status: 'accepted',
+            rentalFee: fees.rentalFee,
+            platformFee: fees.platformFee,
+            taxRate: fees.taxRate,
+            taxAmount: fees.taxAmount,
+            protectionType,
+            depositAmount: fees.depositAmount,
+            insuranceFee: fees.insuranceFee,
+            totalCharged: fees.totalCharged,
+          },
+          include: {
+            item: true,
+            borrower: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+            lender: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+          },
+        });
       });
-      return res.status(409).json({
-        error: 'This item is already booked during the requested dates',
-        conflictingPeriod: {
-          pickupTime: conflict.conflictingTransaction.pickupTime,
-          returnTime: conflict.conflictingTransaction.returnTime,
-        },
-      });
+    } catch (err) {
+      if (err.statusCode === 409) {
+        return res.status(409).json({
+          error: err.message,
+          conflictingPeriod: err.conflictingPeriod,
+        });
+      }
+      throw err;
     }
-
-    // Calculate fees with tax
-    const taxRate = getTaxRate(updatedMatch.item.owner.state);
-    const fees = calculateFees(updatedMatch.item, pickupTime, returnTime, protectionType, taxRate);
-
-    // Create transaction in 'accepted' status (lender's match acceptance IS the approval)
-    transaction = await prisma.transaction.create({
-      data: {
-        requestId: updatedMatch.requestId,
-        itemId: updatedMatch.item.id,
-        borrowerId: updatedMatch.request.requesterId,
-        lenderId: updatedMatch.item.ownerId,
-        pickupTime: new Date(pickupTime),
-        returnTime: new Date(returnTime),
-        status: 'accepted',
-        rentalFee: fees.rentalFee,
-        platformFee: fees.platformFee,
-        taxRate: fees.taxRate,
-        taxAmount: fees.taxAmount,
-        protectionType,
-        depositAmount: fees.depositAmount,
-        insuranceFee: fees.insuranceFee,
-        totalCharged: fees.totalCharged,
-      },
-      include: {
-        item: true,
-        borrower: {
-          select: { id: true, firstName: true, lastName: true },
-        },
-        lender: {
-          select: { id: true, firstName: true, lastName: true },
-        },
-      },
-    });
   }
 
   // Notify the requester (borrower) of the response

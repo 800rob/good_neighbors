@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const {
   createItem,
   getItems,
@@ -85,13 +85,20 @@ router.get(
 );
 
 // GET /api/items/:id
-router.get('/:id', optionalAuth, asyncHandler(getItem));
+router.get(
+  '/:id',
+  optionalAuth,
+  [param('id').isUUID().withMessage('Invalid item ID')],
+  handleValidationErrors,
+  asyncHandler(getItem)
+);
 
 // PUT /api/items/:id
 router.put(
   '/:id',
   authenticate,
   [
+    param('id').isUUID().withMessage('Invalid item ID'),
     body('category').optional().isIn(CATEGORIES).withMessage('Invalid category'),
     body('condition').optional().isIn(CONDITIONS).withMessage('Invalid condition'),
     body('pricingType').optional().isIn(PRICING_TYPES).withMessage('Invalid pricing type'),
@@ -105,6 +112,12 @@ router.put(
 );
 
 // DELETE /api/items/:id
-router.delete('/:id', authenticate, asyncHandler(deleteItem));
+router.delete(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid item ID')],
+  handleValidationErrors,
+  asyncHandler(deleteItem)
+);
 
 module.exports = router;

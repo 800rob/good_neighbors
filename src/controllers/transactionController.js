@@ -78,51 +78,65 @@ async function createTransaction(req, res) {
     return res.status(400).json({ error: 'Either matchId or itemId is required' });
   }
 
-  // Check for date conflicts with existing bookings
-  const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
-  if (conflict.hasConflict) {
-    return res.status(409).json({
-      error: 'This item is already booked during the requested dates',
-      conflictingPeriod: {
+  // Wrap date conflict check + fee calc + create in a transaction for atomicity
+  const transaction = await prisma.$transaction(async (tx) => {
+    // Check for date conflicts with existing bookings
+    const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+    if (conflict.hasConflict) {
+      const err = new Error('This item is already booked during the requested dates');
+      err.statusCode = 409;
+      err.conflictingPeriod = {
         pickupTime: conflict.conflictingTransaction.pickupTime,
         returnTime: conflict.conflictingTransaction.returnTime,
+      };
+      throw err;
+    }
+
+    // Calculate fees with tax
+    const taxRate = getTaxRate(item.owner.state);
+    const fees = calculateFees(item, pickupTime, returnTime, protectionType, taxRate);
+
+    return tx.transaction.create({
+      data: {
+        requestId: match?.requestId || null,
+        itemId: item.id,
+        borrowerId: req.user.id,
+        lenderId: item.ownerId,
+        pickupTime: new Date(pickupTime),
+        returnTime: new Date(returnTime),
+        rentalFee: fees.rentalFee,
+        platformFee: fees.platformFee,
+        taxRate: fees.taxRate,
+        taxAmount: fees.taxAmount,
+        protectionType,
+        depositAmount: fees.depositAmount,
+        insuranceFee: fees.insuranceFee,
+        totalCharged: fees.totalCharged,
+      },
+      include: {
+        item: true,
+        borrower: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
+        lender: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
       },
     });
-  }
-
-  // Calculate fees with tax
-  const taxRate = getTaxRate(item.owner.state);
-  const fees = calculateFees(item, pickupTime, returnTime, protectionType, taxRate);
-
-  const transaction = await prisma.transaction.create({
-    data: {
-      requestId: match?.requestId || null,
-      itemId: item.id,
-      borrowerId: req.user.id,
-      lenderId: item.ownerId,
-      pickupTime: new Date(pickupTime),
-      returnTime: new Date(returnTime),
-      rentalFee: fees.rentalFee,
-      platformFee: fees.platformFee,
-      taxRate: fees.taxRate,
-      taxAmount: fees.taxAmount,
-      protectionType,
-      depositAmount: fees.depositAmount,
-      insuranceFee: fees.insuranceFee,
-      totalCharged: fees.totalCharged,
-    },
-    include: {
-      item: true,
-      borrower: {
-        select: { id: true, firstName: true, lastName: true, phoneNumber: true },
-      },
-      lender: {
-        select: { id: true, firstName: true, lastName: true, phoneNumber: true },
-      },
-    },
+  }).catch((err) => {
+    if (err.statusCode === 409) {
+      return res.status(409).json({
+        error: err.message,
+        conflictingPeriod: err.conflictingPeriod,
+      });
+    }
+    throw err;
   });
 
-  // Notify the lender of the new transaction request
+  // If response already sent (409 conflict), stop
+  if (res.headersSent) return;
+
+  // Notifications sent outside the transaction (idempotent)
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
   await notifyUser(item.ownerId, 'transaction_requested', {
     transactionId: transaction.id,

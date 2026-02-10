@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const {
   getCurrentUser,
   updateCurrentUser,
@@ -32,9 +32,21 @@ router.put(
 );
 
 // GET /api/users/:id
-router.get('/:id', authenticate, asyncHandler(getUserProfile));
+router.get(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid user ID')],
+  handleValidationErrors,
+  asyncHandler(getUserProfile)
+);
 
 // GET /api/users/:id/ratings
-router.get('/:id/ratings', authenticate, asyncHandler(getUserRatings));
+router.get(
+  '/:id/ratings',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid user ID')],
+  handleValidationErrors,
+  asyncHandler(getUserRatings)
+);
 
 module.exports = router;
