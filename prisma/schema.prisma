@@ -263,6 +263,7 @@ model Match {
   request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
   item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
+  @@unique([requestId, itemId], name: "uq_match_request_item")
   @@index([requestId], name: "idx_match_request")
   @@index([itemId], name: "idx_match_item")
   @@index([lenderResponse], name: "idx_match_response")

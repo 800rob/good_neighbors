@@ -143,8 +143,9 @@ async function getTransactionRatings(req, res) {
     },
   });
 
-  // Check visibility rules: ratings visible after both submit OR 7 days pass
-  const transactionAge = Date.now() - new Date(transaction.updatedAt).getTime();
+  // Check visibility rules: ratings visible after both submit OR 7 days after return
+  const visibilityAnchor = transaction.actualReturnTime || transaction.updatedAt;
+  const transactionAge = Date.now() - new Date(visibilityAnchor).getTime();
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const bothRated = ratings.length === 2;
   const isVisible = bothRated || transactionAge > sevenDays;

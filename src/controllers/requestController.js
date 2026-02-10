@@ -327,6 +327,13 @@ async function browseRequests(req, res) {
     });
   }
 
+  const parsedLimit = parseInt(limit);
+  const parsedOffset = parseInt(offset);
+  const hasDistanceFilter = latitude && longitude;
+
+  // Over-fetch when distance filtering to compensate for post-query filtering
+  const fetchLimit = hasDistanceFilter ? parsedLimit * 3 : parsedLimit;
+
   const [requests, total] = await Promise.all([
     prisma.request.findMany({
       where,
@@ -347,15 +354,15 @@ async function browseRequests(req, res) {
         _count: { select: { matches: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: fetchLimit,
+      skip: parsedOffset,
     }),
     prisma.request.count({ where }),
   ]);
 
   // Calculate distance if coordinates provided
   let resultsWithDistance = requests;
-  if (latitude && longitude) {
+  if (hasDistanceFilter) {
     const lat = parseFloat(latitude);
     const lon = parseFloat(longitude);
     const { calculateDistance } = require('../utils/distance');
@@ -371,7 +378,8 @@ async function browseRequests(req, res) {
       .filter((r) => {
         if (!radiusMiles || !r.distance) return true;
         return r.distance <= parseFloat(radiusMiles);
-      });
+      })
+      .slice(0, parsedLimit);
   }
 
   // Compute averageRating / totalRatings from ratingsReceived
@@ -395,8 +403,8 @@ async function browseRequests(req, res) {
     requests: enrichedResults,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: parsedLimit,
+      offset: parsedOffset,
     },
   });
 }

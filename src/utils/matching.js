@@ -391,6 +391,13 @@ async function findMatchesForRequest(requestId) {
       data: { status: 'matched' },
     });
 
+    // Fetch created matches to get their actual IDs for notifications
+    const createdMatches = await prisma.match.findMany({
+      where: { requestId },
+      select: { id: true, itemId: true },
+    });
+    const matchIdByItemId = new Map(createdMatches.map(m => [m.itemId, m.id]));
+
     // Notify each item owner (lender) of the match
     const requesterFullName = [request.requester.firstName, request.requester.lastName].filter(Boolean).join(' ');
     for (const matchData of matches) {
@@ -405,7 +412,7 @@ async function findMatchesForRequest(requestId) {
         }
 
         await notifyUser(item.ownerId, 'match_created', {
-          matchId: matchData.itemId, // Will be replaced with actual match ID after fetching
+          matchId: matchIdByItemId.get(matchData.itemId),
           requestId: request.id,
           itemId: item.id,
           itemTitle: item.title,
@@ -800,6 +807,16 @@ async function findRequestsForItem(itemId) {
     data: { status: 'matched' },
   });
 
+  // Fetch created matches to get their actual IDs for notifications
+  const createdReverseMatches = await prisma.match.findMany({
+    where: {
+      itemId: item.id,
+      requestId: { in: matchedRequestIds },
+    },
+    select: { id: true, requestId: true },
+  });
+  const reverseMatchIdByRequestId = new Map(createdReverseMatches.map(m => [m.requestId, m.id]));
+
   // Notify both parties for each match
   const ownerFullName = [item.owner.firstName, item.owner.lastName].filter(Boolean).join(' ');
   let itemPrice = null;
@@ -817,6 +834,7 @@ async function findRequestsForItem(itemId) {
 
     // Notify the item owner (lender): "Your item matched a request"
     await notifyUser(item.ownerId, 'match_created', {
+      matchId: reverseMatchIdByRequestId.get(request.id),
       requestId: request.id,
       itemId: item.id,
       itemTitle: item.title,

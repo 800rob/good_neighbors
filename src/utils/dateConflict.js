@@ -2,9 +2,9 @@ const prisma = require('../config/database');
 
 /**
  * Transaction statuses that block (reserve) dates on an item.
- * Cancelled, completed, disputed, and requested do NOT block.
+ * Cancelled, completed, and disputed do NOT block.
  */
-const BLOCKING_STATUSES = ['accepted', 'pickup_confirmed', 'active', 'return_initiated'];
+const BLOCKING_STATUSES = ['requested', 'accepted', 'pickup_confirmed', 'active', 'return_initiated'];
 
 /**
  * Check if an item has a date conflict with the given time range.

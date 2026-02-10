@@ -214,6 +214,13 @@ async function getItems(req, res) {
     if (maxPrice) where.priceAmount.lte = parseFloat(maxPrice);
   }
 
+  const parsedLimit = parseInt(limit);
+  const parsedOffset = parseInt(offset);
+  const hasDistanceFilter = latitude && longitude;
+
+  // Over-fetch when distance filtering to compensate for post-query filtering
+  const fetchLimit = hasDistanceFilter ? parsedLimit * 3 : parsedLimit;
+
   // Get items
   let items = await prisma.item.findMany({
     where,
@@ -231,12 +238,12 @@ async function getItems(req, res) {
       },
     },
     orderBy: { [sortBy]: sortOrder },
-    take: parseInt(limit),
-    skip: parseInt(offset),
+    take: fetchLimit,
+    skip: parsedOffset,
   });
 
   // Filter by distance if coordinates provided
-  if (latitude && longitude) {
+  if (hasDistanceFilter) {
     const userLat = parseFloat(latitude);
     const userLon = parseFloat(longitude);
     const maxRadius = parseFloat(radiusMiles);
@@ -259,7 +266,8 @@ async function getItems(req, res) {
         if (a.distance === null) return 1;
         if (b.distance === null) return -1;
         return a.distance - b.distance;
-      });
+      })
+      .slice(0, parsedLimit);
   }
 
   const total = await prisma.item.count({ where });
@@ -268,8 +276,8 @@ async function getItems(req, res) {
     items,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: parsedLimit,
+      offset: parsedOffset,
     },
   });
 }

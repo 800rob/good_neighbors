@@ -26,7 +26,8 @@ async function main() {
       data: {
         email: 'alice@example.com',
         passwordHash,
-        fullName: 'Alice Johnson',
+        firstName: 'Alice',
+        lastName: 'Johnson',
         phoneNumber: '9705551001',
         address: '123 Mountain Ave, Fort Collins, CO',
         latitude: 40.5853,
@@ -38,7 +39,8 @@ async function main() {
       data: {
         email: 'bob@example.com',
         passwordHash,
-        fullName: 'Bob Smith',
+        firstName: 'Bob',
+        lastName: 'Smith',
         phoneNumber: '9705551002',
         address: '456 College Ave, Fort Collins, CO',
         latitude: 40.5734,
@@ -50,7 +52,8 @@ async function main() {
       data: {
         email: 'carol@example.com',
         passwordHash,
-        fullName: 'Carol Williams',
+        firstName: 'Carol',
+        lastName: 'Williams',
         phoneNumber: '9705551003',
         address: '789 Shields St, Fort Collins, CO',
         latitude: 40.5501,
@@ -62,7 +65,8 @@ async function main() {
       data: {
         email: 'david@example.com',
         passwordHash,
-        fullName: 'David Brown',
+        firstName: 'David',
+        lastName: 'Brown',
         phoneNumber: '9705551004',
         address: '321 Harmony Rd, Fort Collins, CO',
         latitude: 40.5254,
@@ -74,7 +78,8 @@ async function main() {
       data: {
         email: 'emma@example.com',
         passwordHash,
-        fullName: 'Emma Davis',
+        firstName: 'Emma',
+        lastName: 'Davis',
         phoneNumber: '9705551005',
         address: '654 Drake Rd, Fort Collins, CO',
         latitude: 40.5456,
@@ -86,7 +91,8 @@ async function main() {
       data: {
         email: 'frank@example.com',
         passwordHash,
-        fullName: 'Frank Miller',
+        firstName: 'Frank',
+        lastName: 'Miller',
         phoneNumber: '9705551006',
         address: '987 Timberline Rd, Fort Collins, CO',
         latitude: 40.5389,

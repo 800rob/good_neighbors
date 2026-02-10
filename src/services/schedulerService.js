@@ -299,7 +299,7 @@ async function sendRequestExpiringReminders() {
       status: {
         in: ['open', 'matched']
       },
-      neededUntil: {
+      expiresAt: {
         gte: in23Hours,
         lte: in24Hours
       }

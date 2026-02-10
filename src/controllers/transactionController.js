@@ -285,9 +285,9 @@ async function updateTransactionStatus(req, res) {
 
   // Calculate late fee if returning late
   if (status === 'return_confirmed' || status === 'completed') {
-    const now = new Date();
-    if (now > transaction.returnTime && transaction.item.lateFeeAmount) {
-      const daysLate = Math.ceil((now - transaction.returnTime) / (1000 * 60 * 60 * 24));
+    const actualReturn = updateData.actualReturnTime || new Date();
+    if (actualReturn > transaction.returnTime && transaction.item.lateFeeAmount) {
+      const daysLate = Math.ceil((actualReturn - transaction.returnTime) / (1000 * 60 * 60 * 24));
       updateData.lateFeeCharged = parseFloat(transaction.item.lateFeeAmount) * daysLate;
     }
   }

@@ -33,23 +33,27 @@ async function respondToMatch(req, res) {
     return res.status(403).json({ error: 'Not authorized to respond to this match' });
   }
 
-  // Check if already responded
-  if (match.lenderResponse !== 'pending') {
-    return res.status(400).json({ error: 'Already responded to this match' });
-  }
-
   // Check if request is still open
   if (match.request.status === 'cancelled' || match.request.status === 'expired') {
     return res.status(400).json({ error: 'Request is no longer active' });
   }
 
-  // Update match response
-  const updatedMatch = await prisma.match.update({
-    where: { id },
+  // Atomically claim the match — only succeeds if still pending (prevents race condition)
+  const { count } = await prisma.match.updateMany({
+    where: { id, lenderResponse: 'pending' },
     data: {
       lenderResponse: response,
       respondedAt: new Date(),
     },
+  });
+
+  if (count === 0) {
+    return res.status(400).json({ error: 'Already responded to this match' });
+  }
+
+  // Fetch the full updated match for the rest of the logic
+  const updatedMatch = await prisma.match.findUnique({
+    where: { id },
     include: {
       item: {
         include: {
