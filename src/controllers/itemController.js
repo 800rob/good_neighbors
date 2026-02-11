@@ -338,13 +338,9 @@ async function getItem(req, res) {
     _count: { overallRating: true },
   });
 
-  // Item is effectively unavailable if there's an active transaction
-  const isCurrentlyBorrowed = !!activeTransaction;
-
   res.json({
     ...item,
-    isAvailable: item.isAvailable && !isCurrentlyBorrowed,
-    isCurrentlyBorrowed,
+    isCurrentlyBorrowed: !!activeTransaction,
     activeTransaction: activeTransaction ? {
       id: activeTransaction.id,
       status: activeTransaction.status,
