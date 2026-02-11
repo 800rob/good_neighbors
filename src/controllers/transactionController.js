@@ -216,7 +216,7 @@ async function getMyTransactions(req, res) {
       where,
       include: {
         item: {
-          select: { id: true, title: true, photoUrls: true },
+          select: { id: true, title: true, photoUrls: true, category: true, categoryTier2: true },
         },
         borrower: {
           select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
