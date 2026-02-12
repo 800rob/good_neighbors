@@ -587,4 +587,46 @@ async function updateRequest(req, res) {
   res.json(updated);
 }
 
-module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests, updateRequest };
+/**
+ * Delete a request
+ * DELETE /api/requests/:id
+ */
+async function deleteRequest(req, res) {
+  const { id } = req.params;
+
+  const request = await prisma.request.findUnique({
+    where: { id },
+  });
+
+  if (!request) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
+  if (request.requesterId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to delete this request' });
+  }
+
+  // Block deletion if there's an active (in-progress) transaction
+  const activeTransactionCount = await prisma.transaction.count({
+    where: {
+      requestId: id,
+      status: { notIn: ['completed', 'cancelled'] },
+    },
+  });
+
+  if (activeTransactionCount > 0) {
+    return res.status(409).json({
+      error: 'Cannot delete a request with active transactions. Cancel the transaction first.',
+    });
+  }
+
+  // Delete related matches first, then the request
+  await prisma.$transaction([
+    prisma.match.deleteMany({ where: { requestId: id } }),
+    prisma.request.delete({ where: { id } }),
+  ]);
+
+  res.json({ message: 'Request deleted successfully' });
+}
+
+module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests, updateRequest, deleteRequest };

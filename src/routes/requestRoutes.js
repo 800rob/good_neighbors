@@ -8,6 +8,7 @@ const {
   getRequestMatches,
   browseRequests,
   updateRequest,
+  deleteRequest,
 } = require('../controllers/requestController');
 const { respondToMatch, getIncomingMatches } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
@@ -124,6 +125,15 @@ router.put(
   [param('id').isUUID().withMessage('Invalid request ID')],
   handleValidationErrors,
   asyncHandler(cancelRequest)
+);
+
+// DELETE /api/requests/:id
+router.delete(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid request ID')],
+  handleValidationErrors,
+  asyncHandler(deleteRequest)
 );
 
 // GET /api/requests/:id/matches
