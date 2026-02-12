@@ -201,12 +201,22 @@ async function checkExpiredRequests() {
     include: {
       requester: {
         select: { id: true, firstName: true, lastName: true }
-      }
+      },
+      transactions: {
+        where: { status: { notIn: ['cancelled'] } },
+        select: { id: true },
+        take: 1,
+      },
     }
   });
 
   for (const request of expiredRequests) {
     try {
+      // Skip if the request already has an active/accepted transaction
+      if (request.transactions && request.transactions.length > 0) {
+        continue;
+      }
+
       // Update status to expired
       await prisma.request.update({
         where: { id: request.id },
