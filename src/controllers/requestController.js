@@ -50,9 +50,6 @@ async function createRequest(req, res) {
     });
   }
 
-  // Only set expiresAt if the user explicitly provides one
-  const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
-
   const request = await prisma.request.create({
     data: {
       requesterId: req.user.id,
@@ -65,7 +62,6 @@ async function createRequest(req, res) {
       maxDistanceMiles: parseFloat(maxDistanceMiles),
       latitude: parseFloat(reqLat),
       longitude: parseFloat(reqLon),
-      expiresAt,
       // New hierarchical category fields
       listingType: listingType || null,
       categoryTier1: categoryTier1 || null,
@@ -525,7 +521,6 @@ async function updateRequest(req, res) {
     isOther,
     customNeed,
     details,
-    expiresAt,
   } = req.body;
 
   // Build update data — only include fields that were provided
@@ -543,8 +538,6 @@ async function updateRequest(req, res) {
   if (isOther !== undefined) data.isOther = isOther;
   if (customNeed !== undefined) data.customNeed = customNeed;
   if (details !== undefined) data.details = details;
-  if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null;
-
   // Map tier1 to legacy category if category changed
   if (categoryTier1 !== undefined) {
     const TIER1_TO_LEGACY = {

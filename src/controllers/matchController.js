@@ -212,7 +212,7 @@ async function getIncomingMatches(req, res) {
     lenderResponse: status,
     request: {
       status: { in: ['open', 'matched'] },
-      expiresAt: { gt: new Date() },
+      neededFrom: { gt: new Date() },
     },
   };
 

@@ -181,18 +181,20 @@ async function checkOverdueTransactions() {
 }
 
 /**
- * Check for expired requests and update their status
+ * Check for expired requests and update their status.
+ * A request expires when its start date (neededFrom) has passed
+ * and it still hasn't been fulfilled with a transaction.
  */
 async function checkExpiredRequests() {
   const now = new Date();
 
-  // Find requests that have passed their neededUntil date but are still open/matched
+  // Find requests whose start date has passed but are still open/matched
   const expiredRequests = await prisma.request.findMany({
     where: {
       status: {
         in: ['open', 'matched']
       },
-      neededUntil: {
+      neededFrom: {
         lt: now
       }
     },
@@ -217,7 +219,7 @@ async function checkExpiredRequests() {
         requestTitle: request.title,
       });
 
-      console.log(`[Scheduler] Marked request ${request.id} (${request.title}) as expired`);
+      console.log(`[Scheduler] Marked request ${request.id} (${request.title}) as expired (start date passed)`);
     } catch (error) {
       console.error(`[Scheduler] Failed to expire request ${request.id}:`, error);
     }
@@ -284,63 +286,6 @@ async function sendApprovalReminders() {
 }
 
 /**
- * Send reminders for requests expiring soon (within 24 hours)
- */
-async function sendRequestExpiringReminders() {
-  const now = new Date();
-  const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const in23Hours = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-
-  const expiringRequests = await prisma.request.findMany({
-    where: {
-      status: {
-        in: ['open', 'matched']
-      },
-      expiresAt: {
-        gte: in23Hours,
-        lte: in24Hours
-      }
-    },
-    include: {
-      requester: {
-        select: { id: true, firstName: true, lastName: true }
-      },
-      _count: {
-        select: { matches: true }
-      }
-    }
-  });
-
-  for (const request of expiringRequests) {
-    try {
-      // Check if we already sent a reminder
-      const recentNotifications = await prisma.notification.findMany({
-        where: {
-          userId: request.requesterId,
-          type: 'request_expiring',
-          createdAt: { gt: in23Hours },
-        },
-      });
-      const alreadySent = recentNotifications.some(
-        n => n.data?.requestId === request.id
-      );
-
-      if (alreadySent) continue;
-
-      await notifyUser(request.requesterId, 'request_expiring', {
-        requestId: request.id,
-        requestTitle: request.title,
-        matchCount: request._count.matches,
-      });
-
-      console.log(`[Scheduler] Sent expiring reminder for request ${request.id} (${request.title})`);
-    } catch (error) {
-      console.error(`[Scheduler] Failed to send expiring reminder for request ${request.id}:`, error);
-    }
-  }
-}
-
-/**
  * Run all scheduled tasks
  */
 async function runScheduledTasks() {
@@ -352,7 +297,6 @@ async function runScheduledTasks() {
     await checkOverdueTransactions();
     await checkExpiredRequests();
     await sendApprovalReminders();
-    await sendRequestExpiringReminders();
   } catch (error) {
     console.error('[Scheduler] Error running scheduled tasks:', error);
   }
