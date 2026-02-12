@@ -113,6 +113,15 @@ async function createTransaction(req, res) {
     const taxRate = getTaxRate(item.owner.state);
     const fees = calculateFees(item, pickupTime, returnTime, protectionType, taxRate);
 
+    // Update request status so it no longer shows as open/matched
+    // (inside the atomic transaction so it rolls back if creation fails)
+    if (match?.requestId && match.request && ['open', 'matched'].includes(match.request.status)) {
+      await tx.request.update({
+        where: { id: match.requestId },
+        data: { status: 'accepted' },
+      });
+    }
+
     return tx.transaction.create({
       data: {
         requestId: match?.requestId || null,
@@ -320,6 +329,28 @@ async function updateTransactionStatus(req, res) {
     if (actualReturn > transaction.returnTime && transaction.item.lateFeeAmount) {
       const daysLate = Math.ceil((actualReturn - transaction.returnTime) / (1000 * 60 * 60 * 24));
       updateData.lateFeeCharged = parseFloat(transaction.item.lateFeeAmount) * daysLate;
+    }
+  }
+
+  // If cancelling a transaction that came from a request, revert request status
+  // so the borrower can review other matches
+  if (status === 'cancelled' && transaction.requestId) {
+    const otherActiveTransactions = await prisma.transaction.count({
+      where: {
+        requestId: transaction.requestId,
+        id: { not: id },
+        status: { notIn: ['cancelled', 'declined'] },
+      },
+    });
+    if (otherActiveTransactions === 0) {
+      // Check if request has other matches to review
+      const matchCount = await prisma.match.count({
+        where: { requestId: transaction.requestId, lenderResponse: { not: 'declined' } },
+      });
+      await prisma.request.update({
+        where: { id: transaction.requestId },
+        data: { status: matchCount > 0 ? 'matched' : 'open' },
+      });
     }
   }
 

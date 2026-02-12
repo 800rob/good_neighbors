@@ -1,6 +1,7 @@
 const prisma = require('../config/database');
 const { findMatchesForRequest } = require('../utils/matching');
 const { getSpecsForItem, validateBorrowerSpecs } = require('../utils/specUtils');
+const { isAvailableForDates, getItemIdsWithConflicts } = require('../utils/dateConflict');
 
 /**
  * Create a new request (borrower posts need)
@@ -130,7 +131,17 @@ async function getRequest(req, res) {
   }
 
   // Compute averageRating for each match's item owner
+  // and re-validate date availability for each match
   if (request.matches) {
+    // Batch check date conflicts for all matched items
+    let conflictedItemIds = new Set();
+    if (request.neededFrom && request.neededUntil) {
+      const itemIds = request.matches.map(m => m.item?.id).filter(Boolean);
+      if (itemIds.length > 0) {
+        conflictedItemIds = await getItemIdsWithConflicts(itemIds, request.neededFrom, request.neededUntil);
+      }
+    }
+
     for (const match of request.matches) {
       if (match.item?.owner?.ratingsReceived) {
         const ratings = match.item.owner.ratingsReceived;
@@ -139,6 +150,15 @@ async function getRequest(req, res) {
           : null;
         match.item.owner.totalRatings = ratings.length;
         delete match.item.owner.ratingsReceived;
+      }
+
+      // Annotate with real-time date availability
+      if (request.neededFrom && request.neededUntil && match.item) {
+        const rulesOk = isAvailableForDates(match.item, request.neededFrom, request.neededUntil);
+        const noConflict = !conflictedItemIds.has(match.item.id);
+        match.dateAvailable = rulesOk && noConflict;
+      } else {
+        match.dateAvailable = true; // No dates to check, assume available
       }
     }
   }
@@ -156,30 +176,75 @@ async function getMyRequests(req, res) {
   const where = { requesterId: req.user.id };
   if (status) where.status = status;
 
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
+
   const [requests, total] = await Promise.all([
     prisma.request.findMany({
       where,
       include: {
         _count: { select: { matches: true } },
         matches: {
-          where: { lenderResponse: 'accepted' },
-          take: 1,
+          where: { lenderResponse: { not: 'declined' } },
+          include: {
+            item: {
+              select: { id: true, details: true, availableFrom: true, availableUntil: true },
+            },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
-      skip: Math.max(parseInt(offset) || 0, 0),
+      take: parsedLimit,
+      skip: parsedOffset,
     }),
     prisma.request.count({ where }),
   ]);
 
+  // Re-validate match availability for open/matched requests
+  // Batch-check date conflicts for all matched items
+  const activeRequests = requests.filter(r =>
+    ['open', 'matched'].includes(r.status) && r.matches.length > 0 && r.neededFrom && r.neededUntil
+  );
+
+  const allMatchedItemIds = activeRequests.flatMap(r => r.matches.map(m => m.item?.id).filter(Boolean));
+
+  let conflictedItemIds = new Set();
+  if (allMatchedItemIds.length > 0 && activeRequests.length > 0) {
+    // Use the first request's dates as a baseline for batch conflict check
+    // Each request may have different dates, so we check per-request below
+    const uniqueItemIds = [...new Set(allMatchedItemIds)];
+    // We'll check per-request instead of batch since dates differ
+    for (const r of activeRequests) {
+      const itemIds = r.matches.map(m => m.item?.id).filter(Boolean);
+      if (itemIds.length > 0) {
+        const conflicts = await getItemIdsWithConflicts(itemIds, r.neededFrom, r.neededUntil);
+        for (const id of conflicts) conflictedItemIds.add(`${r.id}:${id}`);
+      }
+    }
+  }
+
+  const enrichedRequests = requests.map(r => {
+    let availableMatchCount = r._count.matches;
+
+    if (['open', 'matched'].includes(r.status) && r.neededFrom && r.neededUntil) {
+      availableMatchCount = r.matches.filter(m => {
+        if (!m.item) return false;
+        // Check custom availability rules
+        if (!isAvailableForDates(m.item, r.neededFrom, r.neededUntil)) return false;
+        // Check booking conflicts
+        if (conflictedItemIds.has(`${r.id}:${m.item.id}`)) return false;
+        return true;
+      }).length;
+    }
+
+    // Strip match item details from response (not needed by frontend list views)
+    const { matches, ...rest } = r;
+    return { ...rest, availableMatchCount };
+  });
+
   res.json({
-    requests,
-    pagination: {
-      total,
-      limit: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
-      offset: Math.max(parseInt(offset) || 0, 0),
-    },
+    requests: enrichedRequests,
+    pagination: { total, limit: parsedLimit, offset: parsedOffset },
   });
 }
 
