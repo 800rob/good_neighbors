@@ -279,15 +279,32 @@ async function findMatchesForRequest(requestId) {
       ]
     },
     include: {
-      owner: {
-        include: {
-          ratingsReceived: {
-            select: { overallRating: true },
-          },
-        },
-      },
+      owner: true,
     },
   });
+
+  // Batch-fetch owner ratings in a single aggregate query (avoids N+1)
+  const uniqueOwnerIds = [...new Set(items.map(i => i.ownerId))];
+  const ownerRatings = uniqueOwnerIds.length > 0
+    ? await prisma.rating.groupBy({
+        by: ['ratedUserId'],
+        where: { ratedUserId: { in: uniqueOwnerIds } },
+        _avg: { overallRating: true },
+        _count: { overallRating: true },
+      })
+    : [];
+  const ratingsMap = new Map(ownerRatings.map(r => [r.ratedUserId, {
+    avgRating: r._avg.overallRating,
+    count: r._count.overallRating,
+  }]));
+
+  // Attach pre-computed ratings to each item's owner
+  for (const item of items) {
+    const ownerRating = ratingsMap.get(item.ownerId);
+    item.owner.ratingsReceived = ownerRating
+      ? Array.from({ length: ownerRating.count }, () => ({ overallRating: ownerRating.avgRating }))
+      : [];
+  }
 
   // Load spec defs once for this request's tier3 (cached for all items)
   let specDefs = null;
@@ -671,19 +688,23 @@ async function findRequestsForItem(itemId) {
   const item = await prisma.item.findUnique({
     where: { id: itemId },
     include: {
-      owner: {
-        include: {
-          ratingsReceived: {
-            select: { overallRating: true },
-          },
-        },
-      },
+      owner: true,
     },
   });
 
   if (!item || !item.isAvailable) {
     return [];
   }
+
+  // Fetch owner rating via aggregate (single query instead of loading all ratings)
+  const ownerRating = await prisma.rating.aggregate({
+    where: { ratedUserId: item.ownerId },
+    _avg: { overallRating: true },
+    _count: { overallRating: true },
+  });
+  item.owner.ratingsReceived = ownerRating._count.overallRating > 0
+    ? Array.from({ length: ownerRating._count.overallRating }, () => ({ overallRating: ownerRating._avg.overallRating }))
+    : [];
 
   // Extract keywords from item for filtering
   const itemKeywords = extractKeywords(item.title + ' ' + (item.description || ''));

@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login, logout } = require('../controllers/authController');
+const { register, login, logout, changePassword } = require('../controllers/authController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -51,5 +51,23 @@ router.post(
 
 // POST /api/auth/logout
 router.post('/logout', authenticate, asyncHandler(logout));
+
+// PUT /api/auth/password
+router.put(
+  '/password',
+  authenticate,
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword')
+      .isLength({ min: 8 })
+      .withMessage('New password must be at least 8 characters')
+      .matches(/[A-Z]/)
+      .withMessage('New password must contain at least one uppercase letter')
+      .matches(/[0-9]/)
+      .withMessage('New password must contain at least one number'),
+  ],
+  handleValidationErrors,
+  asyncHandler(changePassword)
+);
 
 module.exports = router;

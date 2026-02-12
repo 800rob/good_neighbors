@@ -170,4 +170,33 @@ async function logout(req, res) {
   res.json({ message: 'Logout successful' });
 }
 
-module.exports = { register, login, logout };
+/**
+ * Change password
+ * PUT /api/auth/password
+ */
+async function changePassword(req, res) {
+  const { currentPassword, newPassword } = req.body;
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isValid) {
+    return res.status(400).json({ error: 'Current password is incorrect' });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { passwordHash },
+  });
+
+  res.json({ message: 'Password changed successfully' });
+}
+
+module.exports = { register, login, logout, changePassword };

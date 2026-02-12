@@ -509,19 +509,27 @@ async function deleteItem(req, res) {
  * GET /api/items/my-listings
  */
 async function getMyItems(req, res) {
-  const { includeUnavailable = 'false' } = req.query;
+  const { includeUnavailable = 'false', limit = 50, offset = 0 } = req.query;
 
   const where = { ownerId: req.user.id };
   if (includeUnavailable !== 'true') {
     where.isAvailable = true;
   }
 
-  const items = await prisma.item.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-  });
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
 
-  res.json(items);
+  const [items, total] = await Promise.all([
+    prisma.item.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parsedLimit,
+      skip: parsedOffset,
+    }),
+    prisma.item.count({ where }),
+  ]);
+
+  res.json({ items, pagination: { total, limit: parsedLimit, offset: parsedOffset } });
 }
 
 module.exports = { createItem, getItems, getItem, updateItem, deleteItem, getMyItems };
