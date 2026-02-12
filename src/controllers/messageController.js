@@ -93,8 +93,8 @@ async function getMessages(req, res) {
         },
       },
       orderBy: { createdAt: 'asc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: Math.min(Math.max(parseInt(limit) || 50, 1), 100),
+      skip: Math.max(parseInt(offset) || 0, 0),
     }),
     prisma.message.count({ where: { transactionId } }),
   ]);
@@ -113,8 +113,8 @@ async function getMessages(req, res) {
     messages,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: Math.min(Math.max(parseInt(limit) || 50, 1), 100),
+      offset: Math.max(parseInt(offset) || 0, 0),
     },
   });
 }

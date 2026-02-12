@@ -72,11 +72,23 @@ async function getNearbyDemand(req, res) {
     orderBy: { createdAt: 'desc' },
   });
 
+  // Filter out requests where user's items have already been declined
+  const userItemIds = userItems.map(i => i.id);
+  const declinedMatches = await prisma.match.findMany({
+    where: {
+      itemId: { in: userItemIds },
+      lenderResponse: 'declined',
+    },
+    select: { requestId: true },
+  });
+  const declinedRequestIds = new Set(declinedMatches.map(m => m.requestId));
+  const filteredRequests = openRequests.filter(r => !declinedRequestIds.has(r.id));
+
   // Calculate distances and filter
   const nearbyRequests = [];
   const expandedRequests = [];
 
-  for (const request of openRequests) {
+  for (const request of filteredRequests) {
     const distance = calculateDistance(
       userLat,
       userLng,

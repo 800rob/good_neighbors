@@ -2,7 +2,7 @@ const prisma = require('../config/database');
 const { notifyUser } = require('../services/notificationService');
 const { calculateFees } = require('../utils/feeCalculation');
 const { getTaxRate } = require('../utils/taxRates');
-const { hasDateConflict } = require('../utils/dateConflict');
+const { hasDateConflict, isAvailableForDates } = require('../utils/dateConflict');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -89,6 +89,13 @@ async function createTransaction(req, res) {
         pickupTime: conflict.conflictingTransaction.pickupTime,
         returnTime: conflict.conflictingTransaction.returnTime,
       };
+      throw err;
+    }
+
+    // Check item availability rules
+    if (!isAvailableForDates(item, pickupTime, returnTime)) {
+      const err = new Error('This item is not available during the requested dates');
+      err.statusCode = 409;
       throw err;
     }
 
@@ -226,8 +233,8 @@ async function getMyTransactions(req, res) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      skip: Math.max(parseInt(offset) || 0, 0),
     }),
     prisma.transaction.count({ where }),
   ]);
@@ -236,8 +243,8 @@ async function getMyTransactions(req, res) {
     transactions,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      offset: Math.max(parseInt(offset) || 0, 0),
     },
   });
 }

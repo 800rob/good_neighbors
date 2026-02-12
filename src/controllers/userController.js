@@ -279,8 +279,8 @@ async function getUserRatings(req, res) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      skip: Math.max(parseInt(offset) || 0, 0),
     }),
     prisma.rating.count({ where }),
   ]);
@@ -289,8 +289,8 @@ async function getUserRatings(req, res) {
     ratings,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      offset: Math.max(parseInt(offset) || 0, 0),
     },
   });
 }

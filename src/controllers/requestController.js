@@ -168,8 +168,8 @@ async function getMyRequests(req, res) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      skip: Math.max(parseInt(offset) || 0, 0),
     }),
     prisma.request.count({ where }),
   ]);
@@ -178,8 +178,8 @@ async function getMyRequests(req, res) {
     requests,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: Math.min(Math.max(parseInt(limit) || 20, 1), 100),
+      offset: Math.max(parseInt(offset) || 0, 0),
     },
   });
 }
@@ -191,32 +191,49 @@ async function getMyRequests(req, res) {
 async function cancelRequest(req, res) {
   const { id } = req.params;
 
-  const request = await prisma.request.findUnique({
-    where: { id },
-  });
+  try {
+    const updatedRequest = await prisma.$transaction(async (tx) => {
+      const request = await tx.request.findUnique({
+        where: { id },
+      });
 
-  if (!request) {
-    return res.status(404).json({ error: 'Request not found' });
+      if (!request) {
+        const err = new Error('Request not found');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      if (request.requesterId !== req.user.id) {
+        const err = new Error('Not authorized to cancel this request');
+        err.statusCode = 403;
+        throw err;
+      }
+
+      if (request.status === 'cancelled') {
+        const err = new Error('Request is already cancelled');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (request.status === 'accepted') {
+        const err = new Error('Cannot cancel an accepted request. Cancel the transaction instead.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      return tx.request.update({
+        where: { id },
+        data: { status: 'cancelled' },
+      });
+    });
+
+    res.json(updatedRequest);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    throw err;
   }
-
-  if (request.requesterId !== req.user.id) {
-    return res.status(403).json({ error: 'Not authorized to cancel this request' });
-  }
-
-  if (request.status === 'cancelled') {
-    return res.status(400).json({ error: 'Request is already cancelled' });
-  }
-
-  if (request.status === 'accepted') {
-    return res.status(400).json({ error: 'Cannot cancel an accepted request. Cancel the transaction instead.' });
-  }
-
-  const updatedRequest = await prisma.request.update({
-    where: { id },
-    data: { status: 'cancelled' },
-  });
-
-  res.json(updatedRequest);
 }
 
 /**
@@ -327,8 +344,8 @@ async function browseRequests(req, res) {
     });
   }
 
-  const parsedLimit = parseInt(limit);
-  const parsedOffset = parseInt(offset);
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
   const hasDistanceFilter = latitude && longitude;
 
   // Over-fetch when distance filtering to compensate for post-query filtering

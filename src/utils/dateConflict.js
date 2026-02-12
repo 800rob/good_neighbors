@@ -95,9 +95,62 @@ async function getItemIdsWithConflicts(itemIds, pickupTime, returnTime) {
   return new Set(conflicts.map(c => c.itemId));
 }
 
+/**
+ * Check if an item's availability rules allow a given date range.
+ * @param {object} item - Item with details JSON and availableFrom/availableUntil
+ * @param {string|Date} pickupTime
+ * @param {string|Date} returnTime
+ * @returns {boolean} true if the item's availability rules allow this range
+ */
+function isAvailableForDates(item, pickupTime, returnTime) {
+  const availability = item.details?.availability;
+
+  if (!availability || availability.mode !== 'custom') {
+    return true;
+  }
+
+  const pickup = new Date(pickupTime);
+  const ret = new Date(returnTime);
+
+  // Check date ranges: entire [pickup, return] must fall within at least one range
+  if (availability.dateRanges && availability.dateRanges.length > 0) {
+    const pickupDate = pickup.toISOString().split('T')[0];
+    const returnDate = ret.toISOString().split('T')[0];
+
+    const withinAnyRange = availability.dateRanges.some(range => {
+      return pickupDate >= range.from && returnDate <= range.until;
+    });
+
+    if (!withinAnyRange) {
+      return false;
+    }
+  }
+
+  // Check recurring days: every calendar day in [pickup, return] must be on an allowed weekday
+  // Use UTC methods throughout — dates are stored as UTC midnight from YYYY-MM-DD inputs
+  if (availability.recurringDays && availability.recurringDays.length > 0 && availability.recurringDays.length < 7) {
+    const allowedDays = new Set(availability.recurringDays);
+
+    const current = new Date(pickup);
+    current.setUTCHours(0, 0, 0, 0);
+    const end = new Date(ret);
+    end.setUTCHours(0, 0, 0, 0);
+
+    while (current <= end) {
+      if (!allowedDays.has(current.getUTCDay())) {
+        return false;
+      }
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+  }
+
+  return true;
+}
+
 module.exports = {
   BLOCKING_STATUSES,
   hasDateConflict,
   getBookedPeriods,
   getItemIdsWithConflicts,
+  isAvailableForDates,
 };

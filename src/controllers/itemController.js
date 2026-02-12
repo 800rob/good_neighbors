@@ -211,8 +211,8 @@ async function getItems(req, res) {
     if (maxPrice) where.priceAmount.lte = parseFloat(maxPrice);
   }
 
-  const parsedLimit = parseInt(limit);
-  const parsedOffset = parseInt(offset);
+  const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  const parsedOffset = Math.max(parseInt(offset) || 0, 0);
   const hasDistanceFilter = latitude && longitude;
 
   // Over-fetch when distance filtering to compensate for post-query filtering
@@ -478,6 +478,21 @@ async function deleteItem(req, res) {
 
   if (existingItem.ownerId !== req.user.id) {
     return res.status(403).json({ error: 'Not authorized to delete this item' });
+  }
+
+  // Check for active transactions before soft-deleting
+  const activeTransactionCount = await prisma.transaction.count({
+    where: {
+      itemId: id,
+      status: { notIn: ['completed', 'cancelled'] },
+    },
+  });
+
+  if (activeTransactionCount > 0) {
+    return res.status(409).json({
+      error: 'Cannot delete item with active transactions. Please complete or cancel them first.',
+      activeTransactions: activeTransactionCount,
+    });
   }
 
   // Soft delete by setting isAvailable to false

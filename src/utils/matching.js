@@ -2,7 +2,7 @@ const prisma = require('../config/database');
 const { calculateDistance } = require('./distance');
 const { notifyUser } = require('../services/notificationService');
 const { getSpecsForItem } = require('./specUtils');
-const { getItemIdsWithConflicts, hasDateConflict } = require('./dateConflict');
+const { getItemIdsWithConflicts, hasDateConflict, isAvailableForDates } = require('./dateConflict');
 
 /**
  * Extract keywords from text (removes common stop words)
@@ -216,9 +216,8 @@ function calculateSpecScore(requestDetails, itemDetails, specDefs) {
       }
 
       case 'text':
-        // Text is informational only, no scoring
+        // Text is informational only, no scoring (weight stays in denominator)
         fieldScore = 0;
-        totalWeight -= weight; // Don't count text fields in the weight
         result.breakdown[def.key] = { score: 0, reason: 'Informational only' };
         break;
 
@@ -310,6 +309,12 @@ async function findMatchesForRequest(requestId) {
     if (conflictedItemIds.has(item.id)) {
       continue;
     }
+    // Check item availability rules
+    if (request.neededFrom && request.neededUntil) {
+      if (!isAvailableForDates(item, request.neededFrom, request.neededUntil)) {
+        continue;
+      }
+    }
     // Calculate distance
     const distance = calculateDistance(
       parseFloat(request.latitude),
@@ -335,8 +340,8 @@ async function findMatchesForRequest(requestId) {
         }
       } else if (request.maxBudget) {
         // Fallback: use estimated rental cost for the full duration
-        const { cost: totalCost } = estimateRentalCost(item, request);
-        if (totalCost > parseFloat(request.maxBudget)) {
+        const estimate = estimateRentalCost(item, request);
+        if (estimate && estimate.cost > parseFloat(request.maxBudget)) {
           continue;
         }
       }
@@ -531,7 +536,8 @@ function estimateRentalCost(item, request) {
     bestCost = calcForTier(parseFloat(item.priceAmount), item.pricingType);
   }
 
-  return { cost: bestCost === Infinity ? 0 : bestCost, tierType: bestTierType };
+  if (bestCost === Infinity) return null;
+  return { cost: bestCost, tierType: bestTierType };
 }
 
 /**
@@ -558,19 +564,24 @@ function calculateMatchScore(request, item, distance, textRelevance, titleMatch,
     if (item.pricingType === 'free') {
       score += 8;
     } else if (item.priceAmount) {
-      const { cost: rentalCost, tierType: bestTier } = estimateRentalCost(item, request);
-      // Use the budget tier that matches the chosen pricing tier
-      const budget = request.details?.budgetTiers?.[bestTier]
-        || parseFloat(request.maxBudget || 0);
+      const estimate = estimateRentalCost(item, request);
+      if (estimate) {
+        const { cost: rentalCost, tierType: bestTier } = estimate;
+        // Use the budget tier that matches the chosen pricing tier
+        const budget = request.details?.budgetTiers?.[bestTier]
+          || parseFloat(request.maxBudget || 0);
 
-      if (budget > 0 && rentalCost > 0) {
-        // Linear 0-8 points: at budget = 0pts, at $0 = 8pts
-        const fraction = Math.min(1, rentalCost / budget);
-        score += 8 * (1 - fraction);
-      } else if (rentalCost > 0) {
-        score += Math.max(0, 8 * (1 - rentalCost / 500));
+        if (budget > 0 && rentalCost > 0) {
+          // Linear 0-8 points: at budget = 0pts, at $0 = 8pts
+          const fraction = Math.min(1, rentalCost / budget);
+          score += 8 * (1 - fraction);
+        } else if (rentalCost > 0) {
+          score += Math.max(0, 8 * (1 - rentalCost / 500));
+        } else {
+          score += 4;
+        }
       } else {
-        score += 4;
+        score += 4; // Neutral score when pricing can't be estimated
       }
     }
 
@@ -719,6 +730,12 @@ async function findRequestsForItem(itemId) {
         continue;
       }
     }
+    // Check item availability rules
+    if (request.neededFrom && request.neededUntil) {
+      if (!isAvailableForDates(item, request.neededFrom, request.neededUntil)) {
+        continue;
+      }
+    }
 
     // Calculate distance using request location and item owner location
     const distance = calculateDistance(
@@ -744,8 +761,8 @@ async function findRequestsForItem(itemId) {
         }
       } else if (request.maxBudget) {
         // Fallback: use estimated rental cost for the full duration
-        const { cost: totalCost } = estimateRentalCost(item, request);
-        if (totalCost > parseFloat(request.maxBudget)) {
+        const estimate = estimateRentalCost(item, request);
+        if (estimate && estimate.cost > parseFloat(request.maxBudget)) {
           continue;
         }
       }
