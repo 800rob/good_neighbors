@@ -186,16 +186,18 @@ async function checkOverdueTransactions() {
  * and it still hasn't been fulfilled with a transaction.
  */
 async function checkExpiredRequests() {
-  const now = new Date();
+  // Use start of today UTC so a request is only expired once the entire start day has passed
+  const todayUTC = new Date();
+  todayUTC.setUTCHours(0, 0, 0, 0);
 
-  // Find requests whose start date has passed but are still open/matched
+  // Find requests whose start date is strictly before today and still open/matched
   const expiredRequests = await prisma.request.findMany({
     where: {
       status: {
         in: ['open', 'matched']
       },
       neededFrom: {
-        lt: now
+        lt: todayUTC
       }
     },
     include: {
