@@ -341,7 +341,33 @@ async function getRequestMatches(req, res) {
     orderBy: { matchScore: 'desc' },
   });
 
-  res.json(matches);
+  // Batch-fetch booked periods for all matched items
+  const itemIds = [...new Set(matches.map(m => m.itemId))];
+  const now = new Date();
+  const bookedTransactions = itemIds.length > 0 ? await prisma.transaction.findMany({
+    where: {
+      itemId: { in: itemIds },
+      status: { in: ['requested', 'accepted', 'pickup_confirmed', 'active', 'return_initiated'] },
+      returnTime: { gt: now },
+    },
+    select: { itemId: true, pickupTime: true, returnTime: true, status: true },
+    orderBy: { pickupTime: 'asc' },
+  }) : [];
+
+  // Group by itemId
+  const periodsByItem = {};
+  for (const t of bookedTransactions) {
+    if (!periodsByItem[t.itemId]) periodsByItem[t.itemId] = [];
+    periodsByItem[t.itemId].push({ pickupTime: t.pickupTime, returnTime: t.returnTime, status: t.status });
+  }
+
+  // Attach bookedPeriods to each match's item
+  const enrichedMatches = matches.map(m => ({
+    ...m,
+    item: m.item ? { ...m.item, bookedPeriods: periodsByItem[m.itemId] || [] } : m.item,
+  }));
+
+  res.json(enrichedMatches);
 }
 
 /**
