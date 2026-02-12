@@ -150,7 +150,7 @@ function calculateSpecScore(requestDetails, itemDetails, specDefs) {
           } else {
             // Outside flexibility: decay to 0
             const overBy = distance - flexibility;
-            fieldScore = Math.max(0, 0.7 * Math.exp(-overBy / (flexibility || 1)));
+            fieldScore = Math.max(0, 0.7 * Math.exp(-overBy / (flexibility || 0.1)));
           }
         } else {
           // No flexibility: exact match = 1.0, otherwise decay based on distance

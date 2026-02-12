@@ -197,7 +197,9 @@ async function respondToMatch(req, res) {
  * GET /api/matches/incoming
  */
 async function getIncomingMatches(req, res) {
-  const { status = 'pending', limit = 20, offset = 0 } = req.query;
+  const { status = 'pending' } = req.query;
+  const parsedLimit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+  const parsedOffset = Math.max(parseInt(req.query.offset) || 0, 0);
 
   // Get all items owned by user
   const userItems = await prisma.item.findMany({
@@ -233,8 +235,8 @@ async function getIncomingMatches(req, res) {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: parsedLimit,
+      skip: parsedOffset,
     }),
     prisma.match.count({ where }),
   ]);

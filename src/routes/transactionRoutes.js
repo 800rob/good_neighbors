@@ -39,7 +39,15 @@ router.post(
     body('matchId').optional().isUUID().withMessage('Invalid match ID'),
     body('itemId').optional().isUUID().withMessage('Invalid item ID'),
     body('pickupTime').isISO8601().withMessage('Valid pickup time is required'),
-    body('returnTime').isISO8601().withMessage('Valid return time is required'),
+    body('returnTime')
+      .isISO8601()
+      .withMessage('Valid return time is required')
+      .custom((value, { req }) => {
+        if (new Date(value) <= new Date(req.body.pickupTime)) {
+          throw new Error('Return time must be after pickup time');
+        }
+        return true;
+      }),
     body('protectionType')
       .isIn(PROTECTION_TYPES)
       .withMessage('Invalid protection type'),

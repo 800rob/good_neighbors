@@ -126,6 +126,13 @@ async function getRequest(req, res) {
     return res.status(404).json({ error: 'Request not found' });
   }
 
+  // Non-owners can only see basic request info (no matches, no location details)
+  const isOwner = request.requesterId === req.user.id;
+  if (!isOwner) {
+    const { matches, latitude, longitude, maxDistanceMiles, ...safeRequest } = request;
+    return res.json(safeRequest);
+  }
+
   // Compute averageRating for each match's item owner
   // and re-validate date availability for each match
   if (request.matches) {
@@ -606,27 +613,35 @@ async function deleteRequest(req, res) {
     return res.status(403).json({ error: 'Not authorized to delete this request' });
   }
 
-  // Block deletion if there's an active (in-progress) transaction
-  const activeTransactionCount = await prisma.transaction.count({
-    where: {
-      requestId: id,
-      status: { notIn: ['completed', 'cancelled'] },
-    },
+  // Atomic check + delete to prevent race condition where a transaction
+  // could be created between the count check and the delete
+  await prisma.$transaction(async (tx) => {
+    const activeTransactionCount = await tx.transaction.count({
+      where: {
+        requestId: id,
+        status: { notIn: ['completed', 'cancelled'] },
+      },
+    });
+
+    if (activeTransactionCount > 0) {
+      throw new Error('ACTIVE_TRANSACTIONS');
+    }
+
+    await tx.match.deleteMany({ where: { requestId: id } });
+    await tx.request.delete({ where: { id } });
+  }).catch((err) => {
+    if (err.message === 'ACTIVE_TRANSACTIONS') {
+      return res.status(409).json({
+        error: 'Cannot delete a request with active transactions. Cancel the transaction first.',
+      });
+    }
+    throw err;
   });
 
-  if (activeTransactionCount > 0) {
-    return res.status(409).json({
-      error: 'Cannot delete a request with active transactions. Cancel the transaction first.',
-    });
+  // Only reached if transaction succeeded
+  if (!res.headersSent) {
+    res.json({ message: 'Request deleted successfully' });
   }
-
-  // Delete related matches first, then the request
-  await prisma.$transaction([
-    prisma.match.deleteMany({ where: { requestId: id } }),
-    prisma.request.delete({ where: { id } }),
-  ]);
-
-  res.json({ message: 'Request deleted successfully' });
 }
 
 module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests, updateRequest, deleteRequest };
