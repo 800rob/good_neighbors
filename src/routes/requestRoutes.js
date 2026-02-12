@@ -7,6 +7,7 @@ const {
   cancelRequest,
   getRequestMatches,
   browseRequests,
+  updateRequest,
 } = require('../controllers/requestController');
 const { respondToMatch, getIncomingMatches } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
@@ -99,6 +100,21 @@ router.get(
   [param('id').isUUID().withMessage('Invalid request ID')],
   handleValidationErrors,
   asyncHandler(getRequest)
+);
+
+// PUT /api/requests/:id
+router.put(
+  '/:id',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Invalid request ID'),
+    body('neededFrom').optional().isISO8601(),
+    body('neededUntil').optional().isISO8601(),
+    body('maxBudget').optional().isFloat({ min: 0 }),
+    body('maxDistanceMiles').optional().isFloat({ min: 0.1, max: 100 }),
+  ],
+  handleValidationErrors,
+  asyncHandler(updateRequest)
 );
 
 // PUT /api/requests/:id/cancel

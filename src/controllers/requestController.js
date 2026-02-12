@@ -49,9 +49,8 @@ async function createRequest(req, res) {
     });
   }
 
-  // Set expiration to 48 hours from now
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 48);
+  // Only set expiresAt if the user explicitly provides one
+  const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
 
   const request = await prisma.request.create({
     data: {
@@ -426,4 +425,108 @@ async function browseRequests(req, res) {
   });
 }
 
-module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests };
+/**
+ * Update a request
+ * PUT /api/requests/:id
+ */
+async function updateRequest(req, res) {
+  const { id } = req.params;
+
+  const request = await prisma.request.findUnique({ where: { id } });
+
+  if (!request) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+
+  if (request.requesterId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to edit this request' });
+  }
+
+  if (!['open', 'matched'].includes(request.status)) {
+    return res.status(400).json({ error: 'Only open or matched requests can be edited' });
+  }
+
+  const {
+    title,
+    description,
+    neededFrom,
+    neededUntil,
+    maxBudget,
+    maxDistanceMiles,
+    listingType,
+    categoryTier1,
+    categoryTier2,
+    categoryTier3,
+    isOther,
+    customNeed,
+    details,
+    expiresAt,
+  } = req.body;
+
+  // Build update data — only include fields that were provided
+  const data = {};
+  if (title !== undefined) data.title = title;
+  if (description !== undefined) data.description = description;
+  if (neededFrom !== undefined) data.neededFrom = new Date(neededFrom);
+  if (neededUntil !== undefined) data.neededUntil = new Date(neededUntil);
+  if (maxBudget !== undefined) data.maxBudget = maxBudget ? parseFloat(maxBudget) : null;
+  if (maxDistanceMiles !== undefined) data.maxDistanceMiles = parseFloat(maxDistanceMiles);
+  if (listingType !== undefined) data.listingType = listingType;
+  if (categoryTier1 !== undefined) data.categoryTier1 = categoryTier1;
+  if (categoryTier2 !== undefined) data.categoryTier2 = categoryTier2;
+  if (categoryTier3 !== undefined) data.categoryTier3 = categoryTier3;
+  if (isOther !== undefined) data.isOther = isOther;
+  if (customNeed !== undefined) data.customNeed = customNeed;
+  if (details !== undefined) data.details = details;
+  if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null;
+
+  // Map tier1 to legacy category if category changed
+  if (categoryTier1 !== undefined) {
+    const TIER1_TO_LEGACY = {
+      'Tools': 'tools',
+      'Outdoor & Recreation': 'outdoor_recreation',
+      'Party & Events': 'party_events',
+      'Lawn & Garden': 'lawn_garden',
+      'Vehicles & Transport': 'vehicles_transport',
+      'Workspace': 'workspace',
+      'Specialized Equipment': 'specialized_equipment',
+      'Emergency & Cleanup': 'other',
+      'Home & Repair': 'services',
+      'Yard & Outdoor': 'services',
+      'Automotive': 'services',
+      'Moving & Hauling': 'services',
+      'Cleaning': 'services',
+      'Tech & Assembly': 'services',
+      'Creative & Media': 'services',
+      'Personal Services': 'services',
+      'Event Services': 'services',
+    };
+    data.category = TIER1_TO_LEGACY[categoryTier1] || 'other';
+  }
+
+  const updated = await prisma.request.update({
+    where: { id },
+    data,
+    include: {
+      requester: {
+        select: { id: true, firstName: true, lastName: true, neighborhood: true },
+      },
+    },
+  });
+
+  // Re-run matching if dates or category changed
+  const datesChanged = neededFrom !== undefined || neededUntil !== undefined;
+  const categoryChanged = categoryTier1 !== undefined || categoryTier2 !== undefined || categoryTier3 !== undefined;
+  if (datesChanged || categoryChanged) {
+    try {
+      await findMatchesForRequest(id);
+    } catch (err) {
+      // Non-fatal — the update succeeded, just log matching error
+      console.error('Re-matching after edit failed:', err.message);
+    }
+  }
+
+  res.json(updated);
+}
+
+module.exports = { createRequest, getRequest, getMyRequests, cancelRequest, getRequestMatches, browseRequests, updateRequest };

@@ -47,12 +47,22 @@ async function createTransaction(req, res) {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    if (match.lenderResponse !== 'accepted') {
-      return res.status(400).json({ error: 'Match has not been accepted by the lender' });
+    if (match.lenderResponse === 'declined') {
+      return res.status(400).json({ error: 'This match has been declined by the lender' });
     }
 
     if (match.request.requesterId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized to create transaction for this match' });
+    }
+
+    // If the lender hasn't responded yet, mark the match as accepted
+    // (borrower is confirming intent; the transaction starts as "requested"
+    //  so the lender still needs to accept the transaction itself)
+    if (match.lenderResponse === 'pending') {
+      await prisma.match.update({
+        where: { id: matchId },
+        data: { lenderResponse: 'accepted', respondedAt: new Date() },
+      });
     }
 
     item = match.item;

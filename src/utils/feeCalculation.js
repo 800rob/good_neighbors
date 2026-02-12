@@ -18,22 +18,22 @@ function calculateRentalFeeForTier(rate, tierType, pickup, returnDate) {
   const msPerHour = 1000 * 60 * 60;
   const msPerDay = msPerHour * 24;
 
+  // Inclusive calendar days (Feb 27–28 = 2 days, not 1)
+  const inclusiveDays = Math.floor(diffMs / msPerDay) + 1;
+
   switch (tierType) {
     case 'hourly': {
       const hours = Math.ceil(diffMs / msPerHour);
       return rate * hours;
     }
     case 'daily': {
-      const days = Math.max(1, Math.ceil(diffMs / msPerDay));
-      return rate * days;
+      return rate * Math.max(1, inclusiveDays);
     }
     case 'weekly': {
-      const weeks = Math.max(1, Math.ceil(diffMs / msPerDay / 7));
-      return rate * weeks;
+      return rate * Math.max(1, Math.ceil(inclusiveDays / 7));
     }
     case 'monthly': {
-      const months = Math.max(1, Math.ceil(diffMs / msPerDay / 30));
-      return rate * months;
+      return rate * Math.max(1, Math.ceil(inclusiveDays / 30));
     }
     default:
       return rate;
