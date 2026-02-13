@@ -674,7 +674,8 @@ function calculateMatchScore(request, item, distance, textRelevance, titleMatch,
   }
 
   // Cap non-exact matches at 98% - 100% should be impossible
-  return Math.max(0, Math.min(98, Math.round(score)));
+  // Use 1 decimal precision for consistency with exact-match scoring
+  return Math.max(0, Math.min(98, Math.round(score * 10) / 10));
 }
 
 /**
