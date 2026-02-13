@@ -266,8 +266,8 @@ async function getIncomingMatches(req, res) {
     matches: enrichedMatches,
     pagination: {
       total,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: parsedLimit,
+      offset: parsedOffset,
     },
   });
 }

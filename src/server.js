@@ -19,6 +19,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const insightsRoutes = require('./routes/insightsRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const favoriteRoutes = require('./routes/favoriteRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,6 +62,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/favorites', favoriteRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -269,6 +269,19 @@ async function getItems(req, res) {
 
   const total = await prisma.item.count({ where });
 
+  // Annotate with isFavorited for authenticated users
+  if (req.user?.id) {
+    const itemIds = items.map(i => i.id);
+    const userFavorites = await prisma.favorite.findMany({
+      where: { userId: req.user.id, itemId: { in: itemIds } },
+      select: { itemId: true },
+    });
+    const favSet = new Set(userFavorites.map(f => f.itemId));
+    items = items.map(item => ({ ...item, isFavorited: favSet.has(item.id) }));
+  } else {
+    items = items.map(item => ({ ...item, isFavorited: false }));
+  }
+
   res.json({
     items,
     pagination: {
@@ -338,8 +351,18 @@ async function getItem(req, res) {
     _count: { overallRating: true },
   });
 
+  // Check if user has favorited this item
+  let isFavorited = false;
+  if (req.user?.id) {
+    const fav = await prisma.favorite.findUnique({
+      where: { uq_favorite_user_item: { userId: req.user.id, itemId: id } },
+    });
+    isFavorited = !!fav;
+  }
+
   res.json({
     ...item,
+    isFavorited,
     isCurrentlyBorrowed: !!activeTransaction,
     activeTransaction: activeTransaction ? {
       id: activeTransaction.id,
