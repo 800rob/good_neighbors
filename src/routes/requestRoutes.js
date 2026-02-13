@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, query, param } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const {
   createRequest,
   getRequest,
@@ -16,6 +17,15 @@ const { authenticate, optionalAuth } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
+
+// Rate limiter for request creation (triggers expensive matching)
+const createRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per 15 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests created, please try again later' },
+});
 
 const CATEGORIES = [
   'tools',
@@ -57,6 +67,7 @@ router.get('/my-requests', authenticate, asyncHandler(getMyRequests));
 // POST /api/requests
 router.post(
   '/',
+  createRequestLimiter,
   authenticate,
   [
     body('category').isIn(CATEGORIES).withMessage('Invalid category'),

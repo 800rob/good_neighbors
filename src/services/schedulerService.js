@@ -298,6 +298,72 @@ async function sendApprovalReminders() {
 }
 
 /**
+ * Auto-complete transactions stuck in return_confirmed for 7+ days
+ */
+async function autoCompleteStaleTransactions() {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      status: 'return_confirmed',
+      updatedAt: { lt: sevenDaysAgo },
+    },
+    include: {
+      item: { select: { id: true, title: true } },
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  for (const transaction of transactions) {
+    try {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: { status: 'completed' },
+      });
+
+      const borrowerName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
+      const lenderName = [transaction.lender.firstName, transaction.lender.lastName].filter(Boolean).join(' ');
+
+      const ctx = {
+        transactionId: transaction.id,
+        itemId: transaction.item.id,
+        itemTitle: transaction.item.title,
+        borrowerId: transaction.borrowerId,
+        borrowerName,
+        lenderId: transaction.lenderId,
+        lenderName,
+      };
+
+      await notifyUser(transaction.borrowerId, 'transaction_completed', ctx);
+      await notifyUser(transaction.lenderId, 'transaction_completed', ctx);
+
+      console.log(`[Scheduler] Auto-completed stale transaction ${transaction.id}`);
+    } catch (error) {
+      console.error(`[Scheduler] Failed to auto-complete transaction ${transaction.id}:`, error);
+    }
+  }
+}
+
+/**
+ * Delete notifications older than 90 days
+ */
+async function cleanupOldNotifications() {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+  try {
+    const result = await prisma.notification.deleteMany({
+      where: { createdAt: { lt: ninetyDaysAgo } },
+    });
+    if (result.count > 0) {
+      console.log(`[Scheduler] Cleaned up ${result.count} old notifications`);
+    }
+  } catch (error) {
+    console.error('[Scheduler] Failed to cleanup old notifications:', error);
+  }
+}
+
+/**
  * Run all scheduled tasks
  */
 async function runScheduledTasks() {
@@ -309,6 +375,8 @@ async function runScheduledTasks() {
     await checkOverdueTransactions();
     await checkExpiredRequests();
     await sendApprovalReminders();
+    await autoCompleteStaleTransactions();
+    await cleanupOldNotifications();
   } catch (error) {
     console.error('[Scheduler] Error running scheduled tasks:', error);
   }

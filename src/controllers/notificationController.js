@@ -190,6 +190,21 @@ async function deleteNotification(req, res) {
   res.json({ message: 'Notification deleted' });
 }
 
+/**
+ * Delete all read notifications for the current user
+ * DELETE /api/notifications/read
+ */
+async function deleteReadNotifications(req, res) {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      userId: req.user.id,
+      isRead: true,
+    },
+  });
+
+  res.json({ message: `Deleted ${result.count} read notifications`, count: result.count });
+}
+
 module.exports = {
   getNotifications,
   getUnreadCount,
@@ -198,4 +213,5 @@ module.exports = {
   getPreferences,
   updatePreferences,
   deleteNotification,
+  deleteReadNotifications,
 };

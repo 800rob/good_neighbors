@@ -1,8 +1,24 @@
+const Sentry = require('@sentry/node');
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    enabled: process.env.NODE_ENV === 'production',
+    tracesSampleRate: 0.1,
+  });
+}
+
 /**
  * Global error handling middleware
  */
 function errorHandler(err, req, res, next) {
   console.error('Error:', err);
+
+  // Report unexpected errors to Sentry (skip expected client/auth errors)
+  if (process.env.SENTRY_DSN && !err.code?.startsWith?.('P') && err.name !== 'ValidationError' && err.name !== 'JsonWebTokenError' && err.name !== 'TokenExpiredError') {
+    Sentry.captureException(err, { extra: { url: req.originalUrl, method: req.method } });
+  }
 
   // Prisma errors
   if (err.code === 'P2002') {

@@ -12,6 +12,7 @@ const {
   getPreferences,
   updatePreferences,
   deleteNotification,
+  deleteReadNotifications,
 } = require('../controllers/notificationController');
 
 // All routes require authentication
@@ -50,6 +51,9 @@ router.put(
 
 // Mark all as read
 router.put('/read-all', asyncHandler(markAllAsRead));
+
+// Delete all read notifications
+router.delete('/read', asyncHandler(deleteReadNotifications));
 
 // Mark single notification as read
 router.put(
