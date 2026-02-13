@@ -148,6 +148,7 @@ model User {
   notificationPreferences NotificationPreference[]
   notifications           Notification[]
   favorites               Favorite[]
+  auditLogs               TransactionAuditLog[]
 
   @@index([latitude, longitude], name: "idx_user_location")
   @@index([neighborhood], name: "idx_user_neighborhood")
@@ -306,9 +307,10 @@ model Transaction {
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
   borrower User      @relation("BorrowerTransactions", fields: [borrowerId], references: [id], onDelete: Restrict)
   lender   User      @relation("LenderTransactions", fields: [lenderId], references: [id], onDelete: Restrict)
-  photos   Photo[]
-  messages Message[]
-  ratings  Rating[]
+  photos    Photo[]
+  messages  Message[]
+  ratings   Rating[]
+  auditLogs TransactionAuditLog[]
 
   @@index([borrowerId], name: "idx_transaction_borrower")
   @@index([lenderId], name: "idx_transaction_lender")
@@ -449,4 +451,25 @@ model Favorite {
   @@index([userId], name: "idx_favorite_user")
   @@index([itemId], name: "idx_favorite_item")
   @@map("favorites")
+}
+
+/// TransactionAuditLog - Records every status change for audit trail
+model TransactionAuditLog {
+  id            String             @id @default(uuid()) @db.Uuid
+  transactionId String             @map("transaction_id") @db.Uuid
+  userId        String             @map("user_id") @db.Uuid
+  fromStatus    TransactionStatus? @map("from_status")
+  toStatus      TransactionStatus  @map("to_status")
+  action        String             // "created", "status_change", "disputed", "cancelled"
+  metadata      Json?              // Extra context (dispute reason, late fee, etc.)
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId], name: "idx_audit_log_transaction")
+  @@index([userId], name: "idx_audit_log_user")
+  @@index([createdAt], name: "idx_audit_log_created")
+  @@map("transaction_audit_logs")
 }

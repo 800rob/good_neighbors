@@ -108,7 +108,7 @@ async function getRequest(req, res) {
               owner: {
                 select: {
                   id: true, firstName: true, lastName: true, neighborhood: true, state: true,
-                  ratingsReceived: { select: { overallRating: true } },
+                  _count: { select: { ratingsReceived: true } },
                 },
               },
             },
@@ -133,7 +133,7 @@ async function getRequest(req, res) {
     return res.json(safeRequest);
   }
 
-  // Compute averageRating for each match's item owner
+  // Compute averageRating for each match's item owner (batch aggregation)
   // and re-validate date availability for each match
   if (request.matches) {
     // Batch check date conflicts for all matched items
@@ -145,14 +145,24 @@ async function getRequest(req, res) {
       }
     }
 
+    // Batch compute average ratings for all unique owner IDs (avoids N+1)
+    const ownerIds = [...new Set(request.matches.map(m => m.item?.owner?.id).filter(Boolean))];
+    const ratingAverages = ownerIds.length > 0 ? await prisma.rating.groupBy({
+      by: ['ratedUserId'],
+      where: { ratedUserId: { in: ownerIds } },
+      _avg: { overallRating: true },
+    }) : [];
+    const avgByUser = Object.fromEntries(ratingAverages.map(r => [r.ratedUserId, r._avg.overallRating]));
+
     for (const match of request.matches) {
-      if (match.item?.owner?.ratingsReceived) {
-        const ratings = match.item.owner.ratingsReceived;
-        match.item.owner.averageRating = ratings.length > 0
-          ? parseFloat((ratings.reduce((sum, r) => sum + r.overallRating, 0) / ratings.length).toFixed(2))
+      if (match.item?.owner) {
+        const ownerId = match.item.owner.id;
+        const totalRatings = match.item.owner._count?.ratingsReceived || 0;
+        match.item.owner.averageRating = ownerId && avgByUser[ownerId] != null
+          ? parseFloat(avgByUser[ownerId].toFixed(2))
           : null;
-        match.item.owner.totalRatings = ratings.length;
-        delete match.item.owner.ratingsReceived;
+        match.item.owner.totalRatings = totalRatings;
+        delete match.item.owner._count;
       }
 
       // Annotate with real-time date availability

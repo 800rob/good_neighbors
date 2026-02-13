@@ -88,6 +88,19 @@ async function createTransaction(req, res) {
     return res.status(400).json({ error: 'Either matchId or itemId is required' });
   }
 
+  // Validate dates
+  if (!pickupTime || !returnTime) {
+    return res.status(400).json({ error: 'Both pickup time and return time are required' });
+  }
+  const pickup = new Date(pickupTime);
+  const returnDate = new Date(returnTime);
+  if (isNaN(pickup.getTime()) || isNaN(returnDate.getTime())) {
+    return res.status(400).json({ error: 'Invalid date format' });
+  }
+  if (pickup >= returnDate) {
+    return res.status(400).json({ error: 'Pickup time must be before return time' });
+  }
+
   // Wrap date conflict check + fee calc + create in a transaction for atomicity
   const transaction = await prisma.$transaction(async (tx) => {
     // Check for date conflicts with existing bookings
@@ -161,6 +174,17 @@ async function createTransaction(req, res) {
 
   // If response already sent (409 conflict), stop
   if (res.headersSent) return;
+
+  // Audit log: transaction created
+  prisma.transactionAuditLog.create({
+    data: {
+      transactionId: transaction.id,
+      userId: req.user.id,
+      fromStatus: null,
+      toStatus: 'requested',
+      action: 'created',
+    },
+  }).catch(err => console.error('[AuditLog] Failed to log transaction creation:', err.message));
 
   // Notifications sent outside the transaction (idempotent)
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
@@ -367,6 +391,22 @@ async function updateTransactionStatus(req, res) {
       },
     },
   });
+
+  // Audit log: status change
+  const auditMetadata = {};
+  if (status === 'disputed' && disputeReason) auditMetadata.disputeReason = disputeReason;
+  if (updateData.lateFeeCharged) auditMetadata.lateFeeCharged = updateData.lateFeeCharged;
+
+  prisma.transactionAuditLog.create({
+    data: {
+      transactionId: id,
+      userId: req.user.id,
+      fromStatus: transaction.status,
+      toStatus: status,
+      action: status === 'disputed' ? 'disputed' : status === 'cancelled' ? 'cancelled' : 'status_change',
+      metadata: Object.keys(auditMetadata).length > 0 ? auditMetadata : undefined,
+    },
+  }).catch(err => console.error('[AuditLog] Failed to log status change:', err.message));
 
   // Send notifications based on status change
   const borrowerName = [updatedTransaction.borrower.firstName, updatedTransaction.borrower.lastName].filter(Boolean).join(' ');

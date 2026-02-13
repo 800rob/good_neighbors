@@ -228,7 +228,7 @@ async function getIncomingMatches(req, res) {
             requester: {
               select: {
                 id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true,
-                ratingsReceived: { select: { overallRating: true } },
+                _count: { select: { ratingsReceived: true } },
               },
             },
           },
@@ -241,12 +241,20 @@ async function getIncomingMatches(req, res) {
     prisma.match.count({ where }),
   ]);
 
-  // Compute averageRating / totalRatings for each requester, strip raw ratings
+  // Batch compute average ratings for all unique requester IDs (avoids N+1)
+  const requesterIds = [...new Set(matches.map(m => m.request?.requester?.id).filter(Boolean))];
+  const ratingAverages = requesterIds.length > 0 ? await prisma.rating.groupBy({
+    by: ['ratedUserId'],
+    where: { ratedUserId: { in: requesterIds } },
+    _avg: { overallRating: true },
+  }) : [];
+  const avgByUser = Object.fromEntries(ratingAverages.map(r => [r.ratedUserId, r._avg.overallRating]));
+
   const enrichedMatches = matches.map(match => {
-    const ratings = match.request?.requester?.ratingsReceived || [];
-    const totalRatings = ratings.length;
-    const averageRating = totalRatings > 0
-      ? parseFloat((ratings.reduce((sum, r) => sum + r.overallRating, 0) / totalRatings).toFixed(2))
+    const requesterId = match.request?.requester?.id;
+    const totalRatings = match.request?.requester?._count?.ratingsReceived || 0;
+    const averageRating = requesterId && avgByUser[requesterId] != null
+      ? parseFloat(avgByUser[requesterId].toFixed(2))
       : null;
     return {
       ...match,
@@ -254,7 +262,7 @@ async function getIncomingMatches(req, res) {
         ...match.request,
         requester: {
           ...match.request.requester,
-          ratingsReceived: undefined,
+          _count: undefined,
           averageRating,
           totalRatings,
         },
