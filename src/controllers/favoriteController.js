@@ -60,9 +60,9 @@ async function getMyFavorites(req, res) {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Return items with isFavorited: true
+  // Return all favorited items (including unavailable) with isFavorited: true
   const items = favorites
-    .filter(f => f.item.isAvailable)
+    .filter(f => f.item)
     .map(f => ({ ...f.item, isFavorited: true }));
 
   res.json({ items });
