@@ -1,0 +1,755 @@
+GOOD NEIGHBORS — COMPLETE APP OUTLINE
+======================================
+Last Updated: 2026-02-13
+
+WHAT IT IS
+----------
+A peer-to-peer neighborhood sharing platform where neighbors can lend/borrow items
+(tools, camping gear, kitchen appliances), offer/request services (lawn care, snow
+removal), and share workspace. Think "Airbnb for your garage and skills."
+
+
+TECH STACK
+----------
+Layer          | Technology
+---------------|-----------------------------------------------------------
+Frontend       | React 18 + TypeScript + Vite (port 5173, proxy returns 502 JSON on backend failure)
+Backend        | Node.js + Express 4 (port 3000)
+Database       | PostgreSQL + Prisma ORM
+Auth           | JWT (24-hour expiry) + bcrypt
+Styling        | Tailwind CSS (custom green palette, focus-visible keyboard navigation — WCAG AA)
+State          | React Query (server state, adaptive retry: no retry on 4xx, 2x exponential backoff on 5xx/network) + React Context (auth/notifications)
+Forms          | React Hook Form + Zod validation
+HTTP           | Axios with interceptors (all 8 API files use consistent `import apiClient from './client'`, typed PaginationMeta)
+Routing        | React Router v6
+Code Splitting | React.lazy() + Suspense (route-based, all 22 pages)
+
+
+DATABASE MODELS (11 total)
+--------------------------
+Model                    | Purpose
+-------------------------|----------------------------------------------------------
+User                     | Accounts with name, email, address, GPS coordinates, neighborhood, verification status
+Item                     | Listings — 3-tier category system, condition, pricing (free/hourly/daily/weekly/monthly), protection preferences, photos (URL array), category-specific specs (JSON), pricing tiers (JSON)
+Request                  | "I need X" posts — category, date range, budget tiers (JSON), max distance, location, optional user-specified expiration (no default)
+Match                    | Links Requests to Items — scored 0-100 via multi-factor algorithm
+Transaction              | The actual borrow/lend — 9-state lifecycle, fee calculations, protection type
+Photo                    | Verification photos for pickup/return (damage documentation)
+Message                  | Per-transaction chat between borrower and lender
+Rating                   | Dual-direction reviews — 5-star overall + dimension ratings, visibility rules
+Notification             | 18 types, in-app with stubs for email/SMS
+NotificationPreference   | Per-user, per-type channel toggles
+
+
+DETAILED MODEL SCHEMAS
+======================
+
+USER MODEL
+----------
+Field            | Type           | Constraints              | Description
+-----------------|----------------|--------------------------|---------------------------
+id               | UUID           | PK, default(uuid)        | Unique user identifier
+email            | String         | UNIQUE                   | User email for login
+passwordHash     | String         | —                        | Bcrypt hashed password
+firstName        | String         | —                        | First name
+middleName       | String         | Optional                 | Middle name
+lastName         | String         | —                        | Last name
+phoneNumber      | String         | Optional, UNIQUE         | Mobile phone number
+profilePhotoUrl  | String         | Optional                 | URL to profile photo
+address          | String         | Optional                 | Street address line 1
+address2         | String         | Optional                 | Apartment/Suite number
+city             | String         | Optional                 | City name
+state            | String         | Optional                 | State code
+zipCode          | String         | Optional                 | Postal code
+latitude         | Decimal(10,8)  | Optional                 | GPS latitude
+longitude        | Decimal(11,8)  | Optional                 | GPS longitude
+neighborhood     | String         | Optional                 | Neighborhood name
+isVerified       | Boolean        | default(false)           | Email verification status
+createdAt        | DateTime       | default(now)             | Account creation time
+updatedAt        | DateTime       | @updatedAt               | Last profile update
+
+Indexes: location (lat/lon), neighborhood, email
+Relations: items (owned), transactions (as borrower/lender), messages (sent/received), ratings (given/received), notifications
+
+
+ITEM MODEL (Listings)
+---------------------
+Field                  | Type           | Constraints                    | Purpose
+-----------------------|----------------|--------------------------------|---------------------------
+id                     | UUID           | PK                             | Unique item identifier
+ownerId                | UUID           | FK -> User                     | Who owns this item
+category               | Enum           | Category enum                  | Legacy category (backward compat)
+subcategory            | String         | Optional                       | Legacy subcategory
+listingType            | String         | Optional                       | "item" or "service"
+categoryTier1          | String         | Optional                       | Top-level category (e.g., "Tools")
+categoryTier2          | String         | Optional                       | Subcategory (e.g., "Power Tools")
+categoryTier3          | String         | Optional                       | Specific item (e.g., "Drill")
+isOther                | Boolean        | default(false)                 | Custom category flag
+customItemName         | String         | Optional                       | Custom name if category is "Other"
+title                  | String         | —                              | Item name
+description            | Text           | Optional                       | Detailed description
+condition              | Enum           | new/excellent/good/fair/poor   | Item condition
+replacementValue       | Decimal(10,2)  | —                              | Replacement/insurance value
+pricingType            | Enum           | free/hourly/daily/weekly/monthly| Rental pricing model
+priceAmount            | Decimal(10,2)  | Optional                       | Price per unit (if not free)
+lateFeeAmount          | Decimal(10,2)  | Optional                       | Daily late fee
+protectionPreference   | Enum           | waiver_ok/insurance_required/deposit_required/let_me_decide | Protection requirement
+depositPercentage      | Int            | default(0)                     | Deposit % of replacement value (0-100)
+isAvailable            | Boolean        | default(true)                  | Listing active flag
+availableFrom          | DateTime       | Optional                       | Availability start date
+availableUntil         | DateTime       | Optional                       | Availability end date
+photoUrls              | JSON           | default([])                    | Array of photo URLs
+specialInstructions    | Text           | Optional                       | Usage notes/warnings
+details                | JSON           | default({})                    | Category-specific specs + pricingTiers
+
+Indexes: owner, category, isAvailable, type/tier hierarchy
+Relations: owner (User), matches (Match[]), transactions (Transaction[])
+Soft Delete: isAvailable = false marks as deleted
+
+details JSON structure:
+  {
+    specs: { voltage: { value: 20 }, cordless: { value: true } },
+    pricingTiers: { hourly: 5, daily: 25, weekly: 75 },  // Multi-tier pricing
+    availability: {                                        // Rich availability rules
+      mode: 'always' | 'custom',
+      dateRanges: [{ from: '2026-03-01', until: '2026-03-15' }],  // ISO date strings
+      recurringDays: [1, 2, 3, 4, 5]                              // 0=Sun..6=Sat
+    },
+    specVersion: 1,
+    additionalNotes: "..."
+  }
+
+Availability rules:
+  - mode: 'always' → no restrictions (default, backward compatible)
+  - mode: 'custom' → apply rules:
+    - dateRanges (optional): item only available during these windows
+    - recurringDays (optional): item only available on these weekdays
+    - Both combine: available on selected days WITHIN the selected date ranges
+  - Backward compat: availableFrom/availableUntil derived from date ranges (min start / max end)
+    so existing Prisma queries still work as coarse filters
+
+
+REQUEST MODEL (Borrower Posts)
+------------------------------
+Field              | Type           | Constraints        | Purpose
+-------------------|----------------|--------------------|---------------------------
+id                 | UUID           | PK                 | Unique request identifier
+requesterId        | UUID           | FK -> User         | Who posted this need
+category           | Enum           | —                  | Legacy category
+listingType        | String         | Optional           | "item" or "service"
+categoryTier1      | String         | Optional           | Top-level category
+categoryTier2      | String         | Optional           | Subcategory
+categoryTier3      | String         | Optional           | Specific item needed
+isOther            | Boolean        | default(false)     | Custom category flag
+customNeed         | String         | Optional           | Custom need description
+title              | String         | —                  | What they need
+description        | Text           | Optional           | Requirements/preferences
+details            | JSON           | default({})        | Required/preferred specs + budgetTiers
+neededFrom         | DateTime       | —                  | When needed (start)
+neededUntil        | DateTime       | —                  | When needed (end)
+maxBudget          | Decimal(10,2)  | Optional           | Maximum willing to pay (legacy, max of all tiers)
+maxDistanceMiles   | Decimal(5,2)   | default(10)        | Maximum search radius
+latitude           | Decimal(10,8)  | —                  | Request location (latitude)
+longitude          | Decimal(11,8)  | —                  | Request location (longitude)
+status             | Enum           | open/matched/accepted/cancelled/expired | Request status
+expiresAt          | DateTime       | Optional, null     | Request expiration (user-specified, no default)
+createdAt          | DateTime       | default(now)       | Posted time
+updatedAt          | DateTime       | @updatedAt         | Last modification
+
+Lifecycle: open -> matched (when matches found) -> accepted (when lender accepts) -> cancelled/expired
+
+details JSON structure:
+  {
+    specs: { voltage: { value: 20, flexibility: 2, requiredMatch: true } },
+    budgetTiers: { hourly: 10, daily: 45, weekly: 120 },  // Per-tier budgets
+    specVersion: 1,
+    additionalNotes: "..."
+  }
+
+
+MATCH MODEL (Request-Item Pairing)
+----------------------------------
+Field            | Type           | Constraints        | Purpose
+-----------------|----------------|--------------------|---------------------------
+id               | UUID           | PK                 | Unique match identifier
+requestId        | UUID           | FK -> Request      | Which request
+itemId           | UUID           | FK -> Item         | Which item
+distanceMiles    | Decimal(6,2)   | —                  | Distance between parties
+matchScore       | Int            | 0-100              | Match quality score
+lenderNotified   | Boolean        | default(false)     | Notification sent flag
+lenderResponse   | Enum           | pending/accepted/declined/ignored | Lender's response
+respondedAt      | DateTime       | Optional           | When lender responded
+createdAt        | DateTime       | default(now)       | When match created
+
+Constraints: Unique (requestId, itemId) — prevents duplicate matches for the same request+item pair
+Match acceptance uses atomic updateMany (lenderResponse='pending' guard) to prevent race conditions
+
+
+TRANSACTION MODEL (Actual Rental/Loan)
+--------------------------------------
+Field                    | Type           | Constraints        | Purpose
+-------------------------|----------------|--------------------|---------------------------
+id                       | UUID           | PK                 | Unique transaction ID
+requestId                | UUID           | Optional FK -> Req | Associated request
+itemId                   | UUID           | FK -> Item         | Item being borrowed
+borrowerId               | UUID           | FK -> User         | Who's borrowing
+lenderId                 | UUID           | FK -> User         | Who's lending
+status                   | Enum           | (9 states)         | Transaction state
+pickupTime               | DateTime       | —                  | Scheduled pickup
+returnTime               | DateTime       | —                  | Scheduled return
+actualPickupTime         | DateTime       | Optional           | When actually picked up
+actualReturnTime         | DateTime       | Optional           | When actually returned
+rentalFee                | Decimal(10,2)  | —                  | Base rental charge
+platformFee              | Decimal(10,2)  | —                  | $1 + 3% of rental fee
+protectionType           | Enum           | waiver/insurance/deposit | Protection chosen
+depositAmount            | Decimal(10,2)  | Optional           | Held deposit
+insuranceFee             | Decimal(10,2)  | Optional           | Insurance premium (5% of replacement value)
+taxRate                  | Decimal(5,4)   | Optional           | Sales tax rate applied (state-based, e.g. 0.029 for CO)
+taxAmount                | Decimal(10,2)  | Optional           | Sales tax charged on rental fee
+totalCharged             | Decimal(10,2)  | —                  | Sum of all fees (rental + borrower platform fee + tax + insurance/deposit)
+lateFeeCharged           | Decimal(10,2)  | Optional           | Late return fee
+paymentStatus            | Enum           | pending/authorized/captured/refunded/partial_refund | Payment state
+paymentIntentId          | String         | Optional           | Payment processor ID
+disputeReason            | Text           | Optional           | Why disputed
+returnReminderSent       | Boolean        | default(false)     | Reminder notification sent
+overdueNotificationSent  | Boolean        | default(false)     | Overdue notification sent
+createdAt                | DateTime       | default(now)       | When created
+updatedAt                | DateTime       | @updatedAt         | Last change
+
+Status Flow:
+  requested -> accepted -> pickup_confirmed -> active -> return_initiated -> return_confirmed -> completed
+                                                                                            -> disputed
+  cancelled <- (from requested/accepted/pickup_confirmed)
+
+
+PHOTO MODEL (Verification Photos)
+----------------------------------
+Field          | Type           | Constraints        | Purpose
+---------------|----------------|--------------------|---------------------------
+id             | UUID           | PK                 | Unique photo ID
+transactionId  | UUID           | FK -> Transaction  | Which transaction
+uploadedBy     | UUID           | FK -> User         | Who uploaded
+photoType      | Enum           | pickup/return variants | Photo purpose
+fileUrl        | String         | —                  | S3/cloud storage URL
+metadata       | JSON           | default({})        | GPS coords, timestamp, device info
+createdAt      | DateTime       | default(now)       | Upload time
+
+
+MESSAGE MODEL (Transaction Chat)
+---------------------------------
+Field          | Type           | Constraints        | Purpose
+---------------|----------------|--------------------|---------------------------
+id             | UUID           | PK                 | Unique message ID
+transactionId  | UUID           | FK -> Transaction  | Which transaction
+senderId       | UUID           | FK -> User         | Who sent
+recipientId    | UUID           | FK -> User         | Who receives
+messageText    | Text           | —                  | Message content
+photoUrl       | String         | Optional           | Attached photo URL
+isRead         | Boolean        | default(false)     | Read status
+createdAt      | DateTime       | default(now)       | Sent time
+
+
+RATING MODEL (Post-Transaction Reviews)
+----------------------------------------
+Field                  | Type     | Constraints        | Purpose
+-----------------------|----------|--------------------|---------------------------
+id                     | UUID     | PK                 | Unique rating ID
+transactionId          | UUID     | FK -> Transaction  | Which transaction
+raterId                | UUID     | FK -> User         | Who rated
+ratedUserId            | UUID     | FK -> User         | Who's being rated
+role                   | Enum     | lender/borrower    | Context of rated user
+overallRating          | Int      | 1-5                | Star rating
+onTimeRating           | Int      | Optional, 1-5      | Punctuality score
+communicationRating    | Int      | Optional, 1-5      | Communication score
+conditionRating        | Int      | Optional, 1-5      | Item condition on return
+itemAsDescribedRating  | Int      | Optional, 1-5      | Item accuracy
+reviewText             | Text     | Optional           | Written review
+wouldTransactAgain     | Boolean  | —                  | Recommend again
+createdAt              | DateTime | default(now)       | Review time
+
+Constraints: One rating per (transaction, rater) pair
+Visibility: Both ratings visible after both submit OR 7+ days pass
+
+
+NOTIFICATION MODEL
+------------------
+Field      | Type     | Constraints    | Purpose
+-----------|----------|----------------|---------------------------
+id         | UUID     | PK             | Unique notification ID
+userId     | UUID     | FK -> User     | Recipient
+type       | String   | —              | Notification type enum
+title      | String   | —              | Notification title
+message    | String   | —              | Notification text
+data       | JSON     | Optional       | Context data (IDs, names, etc.)
+isRead     | Boolean  | default(false) | Read status
+readAt     | DateTime | Optional       | When read
+createdAt  | DateTime | default(now)   | Created time
+
+
+NOTIFICATION_PREFERENCE MODEL
+------------------------------
+Field             | Type     | Constraints       | Purpose
+------------------|----------|-------------------|---------------------------
+id                | UUID     | PK                | Unique preference ID
+userId            | UUID     | FK -> User        | Whose preferences
+notificationType  | String   | —                 | Type of notification
+inAppEnabled      | Boolean  | default(true)     | In-app notification on/off
+emailEnabled      | Boolean  | default(false)    | Email notification on/off
+smsEnabled        | Boolean  | default(false)    | SMS notification on/off
+
+Constraint: Unique (userId, notificationType) pair
+
+
+ENUM DEFINITIONS
+----------------
+Category: tools, outdoor_recreation, party_events, lawn_garden, vehicles_transport, workspace, specialized_equipment, services, other
+ListingType: item, service
+ItemCondition: new, excellent, good, fair, poor
+PricingType: free, hourly, daily, weekly, monthly
+ProtectionPreference: waiver_ok, insurance_required, deposit_required, let_me_decide
+ProtectionType: waiver, insurance, deposit
+RequestStatus: open, matched, accepted, cancelled, expired
+MatchResponse: pending, accepted, declined, ignored
+TransactionStatus: requested, accepted, pickup_confirmed, active, return_initiated, return_confirmed, completed, disputed, cancelled
+PaymentStatus: pending, authorized, captured, refunded, partial_refund
+PhotoType: pickup_full_view, pickup_damage, pickup_serial, return_full_view, return_damage, return_serial
+RatingRole: lender, borrower
+
+
+CORE FEATURES BUILT
+====================
+
+AUTHENTICATION
+--------------
+- Register with name, email, phone, password (min 8 chars, must include uppercase letter + digit), full address + optional GPS geolocation
+- Address auto-geocoded via OpenStreetMap Nominatim (free, no API key)
+- Login with JWT (stored in localStorage, 24-hour expiry)
+- Rate limiting on auth endpoints (10 requests / 15 min)
+- Protected routes with redirect-after-login
+- Axios interceptor auto-attaches token, 401 auto-redirects to login (skips redirect during intentional logout and on auth URLs)
+- ApiError class preserves HTTP status, error code, and details from backend responses
+- Auth Context validates stored user data with Zod schema on mount, clears invalid data
+- Login/register wrapped in try/catch with localStorage cleanup on failure
+- Password change via PUT /api/auth/password (requires current password verification, new password with same rules as registration: 8+ chars, uppercase, digit)
+
+
+HIERARCHICAL CATEGORY SYSTEM
+-----------------------------
+- 2 listing types: Items and Services
+- 3-tier hierarchy: e.g., Items > Tools > Power Tools > Drill
+- 8 item categories, 9 service categories
+- "Other" option with custom naming at any tier
+- Fuzzy search with Levenshtein distance matching
+- Pricing suggestions per category + condition (low/suggested/high +/-30% ranges)
+- Dynamic spec definitions per category (e.g., a Drill has voltage, amps, cordless?)
+
+
+ITEM LISTINGS
+-------------
+- Multi-step creation form with category picker, specs, pricing, photos, protection preferences
+- Neighborhood page with filters: category tiers, search, condition, pricing type, distance radius (5/10/25/50/100 mi), GPS-based sorting
+- Soft delete, edit, rich availability scheduling (always available OR custom: multiple date ranges + recurring day-of-week selection)
+- Shows distance from user, excludes own items
+- Date-aware browsing: when date filters (availableFrom/availableUntil) provided, only excludes items with overlapping bookings for that range; without dates, falls back to excluding items with any active transaction
+- Item detail returns `bookedPeriods` array (future reserved date ranges) for calendar display
+- Availability rules enforcement: matching engine and transaction creation both check `isAvailableForDates()` — rejects if requested dates fall outside item's custom schedule
+- Rate sort: pricing types ordered hourly > daily > weekly > monthly
+- On creation, automatically reverse-matches against all open requests (bidirectional matching)
+
+
+REQUEST & SMART MATCHING
+-------------------------
+- Post what you need with category, specs (with flexibility ranges and "required for match" flags), date range, per-tier budgets, max distance
+- Budget tiers stored in request.details.budgetTiers (hourly/daily/weekly/monthly) for same-unit comparison with item pricing
+- maxBudget field kept as Math.max of all tiers for backward compatibility
+
+BIDIRECTIONAL MATCHING:
+- Forward: When a request is created, algorithm scans all items and scores matches
+- Reverse: When an item is created, algorithm scans all open/matched requests and scores matches
+- Both directions notify both parties:
+  - Lender receives match_created → navigates to /matches (accept/decline)
+  - Borrower receives match_found → navigates to /requests/:id (view matched items)
+
+AUTO-TRANSACTION ON MATCH ACCEPTANCE:
+- When a lender accepts a match, a transaction is auto-created in 'accepted' status (skipping 'requested')
+- Protection type derived from item's protectionPreference (waiver_ok/let_me_decide → waiver, insurance_required → insurance, deposit_required → deposit)
+- Pickup/return times use the request's neededFrom/neededUntil
+- Fees calculated using shared fee utility with cheapest-tier auto-selection
+- Lender immediately redirected to TransactionDetail page
+- Borrower receives transaction_accepted notification with direct link to transaction
+
+SCORING ALGORITHM (0-100):
+  * Text relevance (45 pts) — keyword overlap
+  * Spec matching (15 pts) — weighted per field, with flexibility decay
+  * Category match (8 pts)
+  * Distance (12 pts) — Haversine formula
+  * Price fit (8 pts) — tier-aware: compares same pricing unit when available (e.g. daily vs daily), budget >= price = full points, proportional penalty otherwise, falls back to maxBudget for old requests. Cheaper items score higher — uses estimated total rental cost (cheapest tier × full duration) normalized against borrower's budget.
+  * Item condition (4 pts)
+  * Owner rating (6 pts)
+  * Exact title match shortcut (85-97 range): starts at 85, +2 category, +0-8 price (cheaper = higher — uses estimateRentalCost to pick cheapest tier for the full duration, scores linearly: $0 cost = +8, at-budget = +0), +0-2 rating, -0-3 distance penalty. All scores rounded to 1 decimal place via Math.round(score * 10) / 10 for consistency.
+- Hard exclusions: "required" specs that don't match, over-budget (tier-aware), over-distance, date conflicts with existing bookings, item availability rules (recurringDays + dateRanges via isAvailableForDates)
+- Date conflict filtering: forward matching uses batch query (`getItemIdsWithConflicts`) to skip items with overlapping bookings; reverse matching checks per-request via `hasDateConflict`
+- Auto-expires after 48 hours
+- Duplicate detection: reverse matching skips items already matched to a request
+
+
+FINANCIAL BREAKDOWN IN MATCH VIEWS
+-----------------------------------
+Both lender and borrower views show the algorithmic match score prominently (e.g., "91% match").
+
+Lender view (Matches page — expanded details):
+  - Match score badge + explanation
+  - "Estimated Earnings" breakdown:
+    - Rate x duration (e.g., "$40.00/day x 2 days = $80.00") — uses cheapest tier
+    - Platform commission deducted ("-$1.70") — lender's 50% share of ($1 + 3%)
+    - Net estimated earnings ("$78.30")
+  - Falls back to tier-aware rate comparison if dates missing
+  - Falls back to raw maxBudget for old data
+
+Borrower view (Request Detail — each match card):
+  - Match score badge
+  - "Estimated Cost" breakdown:
+    - Rate x duration (e.g., "$40.00/day x 2 days = $80.00") — uses cheapest tier
+    - Platform fee added ("+$1.70") — borrower's 50% share of ($1 + 3%)
+    - Sales tax at state rate ("+$2.32 est. tax (~2.9%)")
+    - Estimated total ("$84.02")
+    - Note: protection fees applied at checkout
+    - Over-budget warning if total exceeds their budget tier
+  - Borrower does NOT see lender's post-commission earnings
+
+Transaction Detail (role-specific fee breakdown):
+  - Borrower sees: rental fee + platform fee (half) + sales tax + insurance fee + late fees = total. Security deposit shown separately below as blue info callout — "Temporary hold — refunded after return" for active transactions, "Refunded" with strikethrough for completed/cancelled.
+  - Lender sees: rental fee - platform fee (half) + late fees collected = net earnings
+  - Shows item late fee rate if configured
+
+Revenue Estimator (ItemDetail, owner-only, paid items):
+  - Per pricing tier: rate → platform commission (50% share) → est. sales tax → net earnings
+  - Uses lender's state for tax rate
+
+Date formatting utility: src/utils/dateFormat.ts — formatDateOnly() forces UTC timezone for date-only fields (neededFrom, neededUntil, availableFrom, availableUntil) to prevent off-by-one display in US timezones. All date-only displays across the frontend use timeZone: 'UTC'.
+
+Shared utility: src/utils/feeEstimate.ts mirrors backend fee logic (cheapest-tier selection, rental fee, platform fee = $1+3% split 50/50, state-based sales tax, borrower total, lender earnings).
+Frontend also includes state tax rate table (mirrors backend taxRates.js) for client-side estimates.
+Status utility: src/utils/statusConfig.ts — exports getDaysUntil, getTransactionUrgencyTier (red/yellow/green), getTransactionUrgencyDescription (time-aware action text), urgencyTierToBadgeVariant (maps tier to Badge color), getListingTransactionStatus (accurate per-transaction status label for MyListings).
+
+CHEAPEST-TIER AUTO-SELECTION:
+Both backend (feeCalculation.js) and frontend (feeEstimate.ts) automatically select the cheapest pricing tier when an item has multiple pricing tiers (stored in item.details.pricingTiers). For each available tier, the system calculates rental cost for the full duration and picks the lowest. Example: 48-hour borrow of an item with hourly=$10, daily=$40 → system picks daily (2×$40=$80) instead of hourly (48×$10=$480). Falls back to single pricingType/priceAmount when no tiers exist.
+This same cheapest-tier logic is also used in match scoring (via estimateRentalCost in matching.js) — items with lower total rental cost relative to the borrower's budget score higher, ensuring cheaper options rank above expensive ones for the same item type.
+
+MATCHING ENGINE NOTES (Phase 3):
+- Text specs no longer subtract from weight denominator (text specs were reducing total available points)
+- estimateRentalCost returns null (not cost:0) when pricing is invalid
+- 3 call sites handle null gracefully (neutral scoring instead of full-points for broken data)
+
+
+NEIGHBORHOOD PAGE
+-----------------
+- Unified Supply/Demand toggle replacing old Browse + NearbyDemand pages
+- Supply tab: Browse available items with all filters (category, search, condition, price, distance)
+- Demand tab: Browse open requests with requester info (first name + last initial for privacy), needed dates, budget, category, distance, match count
+- /browse redirects to /neighborhood for backward compatibility
+- Active filters displayed as dismissible chip breadcrumbs above results (search, type, categories, condition, distance, dates) with individual dismiss and "Clear all"
+- Public access (no auth required)
+
+
+TRANSACTION LIFECYCLE (9 states)
+---------------------------------
+  requested -> accepted -> pickup_confirmed -> active -> return_initiated -> return_confirmed -> completed
+                                                                                             -> disputed
+  cancelled <- (early states)
+
+Two creation paths:
+  1. Match-based (auto): Lender accepts match → transaction auto-created in 'accepted' status (skips 'requested')
+  2. Direct borrow: Borrower clicks "Borrow" on ItemDetail → transaction created in 'requested' status → lender approves
+
+BLACKOUT DATES / DOUBLE-BOOKING PREVENTION:
+- Blocking statuses (dates reserved): requested, accepted, pickup_confirmed, active, return_initiated
+- Non-blocking statuses (dates released): completed, cancelled, disputed
+- Overlap formula: existingPickup < requestedReturn AND existingReturn > requestedPickup
+- Transaction creation (both paths) checks for date conflicts before fee calculation — returns HTTP 409 if overlap
+- Match acceptance checks for conflicts and reverts match to 'pending' if overlap found
+- Cancellations automatically release dates (no extra code needed)
+- Utility: shareit-backend/src/utils/dateConflict.js (hasDateConflict, getBookedPeriods, getItemIdsWithConflicts, isAvailableForDates, BLOCKING_STATUSES)
+- isAvailableForDates(item, pickupTime, returnTime): checks item.details.availability rules — date ranges (entire request must fall within at least one range) + recurring days (every calendar day must be allowed). Uses UTC methods throughout for timezone safety.
+
+- Fee engine: shared utility (feeCalculation.js) calculates:
+  - Rental fee: cheapest pricing tier × duration (auto-selects cheapest from item.details.pricingTiers). Duration uses inclusive calendar day counting for daily/weekly/monthly tiers (e.g., Feb 27–28 = 2 days, not 1). Hourly uses exact hour diff.
+  - Platform fee: $1 + 3% of rental fee, split 50/50 (borrower pays half, lender = total - borrower to avoid penny discrepancies). All fee outputs rounded to 2 decimal places.
+  - Sales tax: state-based rate (via taxRates.js) applied to rental fee — stored as taxRate + taxAmount on transaction
+  - Insurance: 5% of replacement value (if protectionType = insurance)
+  - Deposit: configurable % of replacement value (if protectionType = deposit). Deposit is a temporary hold, NOT included in total charged — shown separately in UI.
+  - Total charged to borrower: rentalFee + borrowerPlatformFee + taxAmount + insuranceFee (deposit is separate refundable hold)
+- State sales tax utility (taxRates.js): 50-state + DC lookup table, returns rate by lender's state code
+- Late fee calculation on overdue returns
+- Both parties can transition states, dispute at most points
+
+
+MESSAGING
+---------
+- Per-transaction chat between borrower and lender
+- Unread count tracking, auto-mark-read on fetch
+- Text + optional photo URL per message
+
+
+RATING SYSTEM
+-------------
+- Post-completion dual ratings (borrower rates lender, lender rates borrower)
+- 5-star overall + optional dimensions (on-time, communication, condition, item-as-described)
+- Written review + "would transact again" flag
+- Visibility rules: both ratings hidden until both submit OR 7 days after return (anchored to actualReturnTime)
+- Auto-completes transaction when both rate
+- Clickable ratings: all star displays link to the user's review page (/users/:id for others, /my-ratings for self)
+
+
+NOTIFICATIONS
+-------------
+- 19 types (match_created, match_found, transaction_accepted, message_received, return_reminder, etc.)
+- 30-second polling from frontend
+- Bell icon with "new since last viewed" badge count (delayed 3s after viewing to allow user to read notifications)
+- Click-outside detection only when dropdown is open (efficient event listener lifecycle)
+- Click-to-navigate based on notification type and data:
+  - match_created → /matches (lender view)
+  - match_found → /requests/:requestId (borrower view)
+  - match_accepted → /transactions/:transactionId (if available) or /matches
+  - transaction_* → /transactions/:transactionId
+- Full notification page with infinite scroll + unread filter
+- Per-type preference settings (in-app/email/SMS toggles)
+
+
+INSIGHTS
+--------
+- Nearby Supply (for borrowers): available items matching your request categories — shown on Dashboard under "My Requests" card when user has active requests, links to Neighborhood page
+- Backend insights API still supports both nearby-demand and nearby-supply endpoints (two tiers: nearby 10mi + expanded 25mi)
+- Dashboard no longer shows generic "Nearby Demand" for lenders (was confusing — showed unrelated requests). Lenders see matched demand via the Matches page instead
+
+
+AUTOMATED SCHEDULER
+-------------------
+- Auto-activates transactions at pickup time
+- Sends 24hr return reminders
+- Flags overdue transactions
+- Expires old requests
+- Sends approval reminders for pending requests (12hrs+)
+- Notification dedup: queries by userId + type + createdAt range, then filters in JS by transactionId
+
+
+BACKEND HARDENING
+-----------------
+- Input validation: UUID param validation on all :id routes via express-validator; full validation on notification routes
+- Rate limiting: 10 req/15 min on /auth/login and /auth/register (express-rate-limit)
+- Body size limit: 1MB max JSON payload
+- CORS: restricted to CORS_ORIGIN env var (default http://localhost:5173)
+- Atomicity: createTransaction, submitRating, and respondToMatch (accept path) wrapped in prisma.$transaction() to prevent race conditions
+- Database indexes: Transaction (status+returnTime, status+returnReminderSent, status+overdueNotificationSent), Notification (userId+type+createdAt), Rating (ratedUserId+role)
+- Item search WHERE clause uses always-AND[] pattern for reliable filter composition
+- All 6 controllers clamp pagination limits (1-100) and offsets (>=0) for safety
+- cancelRequest wrapped in prisma.$transaction for TOCTOU safety
+- deleteItem checks for active transactions before soft-delete (409 response)
+- insightsController filters declined requests from getNearbyDemand
+- Matching N+1 fix: owner ratings batch-aggregated via `rating.groupBy()` instead of N+1 `ratingsReceived` includes
+
+
+API ENDPOINTS (55+ across 11 route modules)
+============================================
+
+AUTHENTICATION ENDPOINTS
+------------------------
+Method | Endpoint        | Auth     | Purpose
+-------|-----------------|----------|---------------------------
+POST   | /auth/register  | None     | Create new account
+POST   | /auth/login     | None     | Login & get JWT
+POST   | /auth/logout    | Required | Logout
+PUT    | /auth/password  | Required | Change password
+
+USER ENDPOINTS
+--------------
+Method | Endpoint           | Auth     | Purpose
+-------|---------------------|----------|---------------------------
+GET    | /users/me           | Required | Get current user profile with stats
+PUT    | /users/me           | Required | Update current user
+GET    | /users/:id          | Required | Get public user profile
+GET    | /users/:id/ratings  | Required | Get user's ratings (paginated)
+
+ITEM ENDPOINTS
+--------------
+Method | Endpoint            | Auth     | Purpose
+-------|----------------------|----------|---------------------------
+POST   | /items              | Required | Create item listing (+ auto reverse-match)
+GET    | /items              | Optional | Browse items with filters
+GET    | /items/my-listings  | Required | Get user's items (paginated: `{items, pagination: {total, limit, offset}}`, default limit=50, max=100)
+GET    | /items/:id          | Optional | Get item details + bookedPeriods
+PUT    | /items/:id          | Required | Update item (owner only)
+DELETE | /items/:id          | Required | Soft delete item (owner only)
+
+REQUEST ENDPOINTS
+-----------------
+Method | Endpoint                 | Auth     | Purpose
+-------|---------------------------|----------|---------------------------
+POST   | /requests                | Required | Post a need (auto-matches)
+GET    | /requests/browse         | Optional | Browse open requests (public)
+GET    | /requests/my-requests    | Required | Get user's requests
+GET    | /requests/:id            | Required | Get request + matches
+PUT    | /requests/:id            | Required | Edit request (owner, open/matched only, re-runs matching if dates/category changed)
+PUT    | /requests/:id/cancel     | Required | Cancel request
+GET    | /requests/:id/matches    | Required | Get all matches
+
+MATCH ENDPOINTS
+---------------
+Method | Endpoint              | Auth     | Purpose
+-------|-----------------------|----------|---------------------------
+GET    | /matches/incoming     | Required | Get matches for lender's items
+PUT    | /matches/:id/respond  | Required | Accept/decline match (accept auto-creates transaction)
+
+TRANSACTION ENDPOINTS
+---------------------
+Method | Endpoint                        | Auth     | Purpose
+-------|----------------------------------|----------|---------------------------
+POST   | /transactions                   | Required | Create transaction
+GET    | /transactions/my-transactions   | Required | Get user's transactions
+GET    | /transactions/:id               | Required | Get transaction details
+PUT    | /transactions/:id/status        | Required | Update transaction status
+PUT    | /transactions/:id/dispute       | Required | Flag dispute
+
+MESSAGE ENDPOINTS
+-----------------
+Method | Endpoint                         | Auth     | Purpose
+-------|-----------------------------------|----------|---------------------------
+POST   | /transactions/:id/messages       | Required | Send message
+GET    | /transactions/:id/messages       | Required | Get conversation
+GET    | /messages/unread-count           | Required | Get unread count
+
+RATING ENDPOINTS
+----------------
+Method | Endpoint                        | Auth     | Purpose
+-------|----------------------------------|----------|---------------------------
+POST   | /transactions/:id/rating        | Required | Submit rating
+GET    | /transactions/:id/ratings       | Required | Get transaction ratings
+
+NOTIFICATION ENDPOINTS
+----------------------
+Method | Endpoint                     | Auth     | Purpose
+-------|-------------------------------|----------|---------------------------
+GET    | /notifications               | Required | Get notifications (paginated)
+GET    | /notifications/unread-count  | Required | Get unread count
+PUT    | /notifications/:id/read      | Required | Mark as read
+PUT    | /notifications/read-all      | Required | Mark all read
+DELETE | /notifications/:id           | Required | Delete notification
+GET    | /notifications/preferences   | Required | Get preferences
+PUT    | /notifications/preferences   | Required | Update preferences
+
+INSIGHTS ENDPOINTS
+------------------
+Method | Endpoint                  | Auth     | Purpose
+-------|----------------------------|----------|---------------------------
+GET    | /insights/nearby-demand   | Required | Demand for lender's items
+GET    | /insights/nearby-supply   | Required | Supply for borrower's requests
+
+CATEGORY ENDPOINTS
+------------------
+Method | Endpoint               | Auth | Purpose
+-------|-------------------------|------|---------------------------
+GET    | /categories/hierarchy  | None | Get full category tree
+GET    | /categories/tier1      | None | Get top-level categories
+GET    | /categories/tier2      | None | Get subcategories
+GET    | /categories/tier3      | None | Get specific items
+GET    | /categories/search     | None | Fuzzy search categories
+POST   | /categories/validate   | None | Validate selection
+GET    | /categories/pricing    | None | Get pricing suggestions
+GET    | /categories/specs      | None | Get spec definitions
+
+HEALTH CHECK
+------------
+GET    | /health                | None | Server health check
+
+
+FRONTEND PAGES (23 routes, all lazy-loaded via React.lazy() with <Suspense> fallback)
+==========================
+- Landing (hero, how it works, category showcases, CTA, page fade-in animation)
+- Login / Register (with optional GPS geolocation)
+- Neighborhood (unified Supply/Demand toggle — replaced old Browse + NearbyDemand)
+  - /browse redirects to /neighborhood
+  - Staggered card fade-in animation on item/request grids
+  - Demand tab: category-colored request cards (8 category-to-gradient mappings)
+- Item Detail (photos, specs, rich availability display, owner-only booked periods card, revenue estimator with 2-decimal rounding on replacement value, borrow modal with fee preview showing rental/platform fee/tax/insurance/deposit line items, date conflict validation, loading skeleton)
+- Create Item / Edit Item (multi-step with dynamic specs + pricing suggestions + rich availability scheduling + tier-specific category validation messages + required specs validation before submission, draft save indicator with lastSaved timestamp, auto-scroll to first validation error on submit)
+- My Listings (item grid with accurate per-transaction status badge via getListingTransactionStatus(): requested→"Pending", accepted→"Accepted", pickup_confirmed/active→"With {name}", return_initiated/return_confirmed→"Returning", plus "+N upcoming bookings" for additional non-terminal transactions; status badges are clickable — active transaction badges navigate to /transactions/:id, "Available"/"Unavailable" navigate to /items/:id; context-accurate transaction descriptions; float-safe price formatting; earnings, edit/delete)
+- Create Request (multi-step with borrower-mode specs + flexibility + per-tier budgets + tier-specific category validation messages + required specs validation before submission; location validated at submit time — toast error if GPS unavailable, does not block form entry; draft save indicator, auto-scroll to validation errors)
+- Edit Request (pre-populated form matching CreateRequest, owner-only for open/matched status, re-runs matching if dates/category changed)
+- Request Detail (matches ranked by score with financial estimates, "Confirm & Borrow" button on match cards pre-fills dates from request + lender's protection preference, opens confirm modal with item summary/fee breakdown/deposit callout/editable dates+protection; "View Transaction" for matches with existing transactions; cancel button for owner; Edit button for owner of open/matched requests; loading skeleton)
+- My Requests (grouped by status, match counts, Edit button on open/matched request cards; status badges are clickable — "In Progress"/"Fulfilled"/"Completed" navigate to the transaction, "Has Matches"/"Match Accepted" navigate to request detail, "Searching"/"Unfulfilled"/"Cancelled" navigate to request detail)
+- Matches (incoming — accept/decline with auto-redirect to transaction, match score, financial breakdown, clickable ratings, consistent Button components for view details toggle)
+- Transactions (color-coded filter tabs: green=Lending, blue=Borrowing; "All" view groups active transactions by Lending/Borrowing sub-sections; sort dropdown with visible "Sort by" label: newest/oldest, by status, by amount high/low; transaction cards have left border accent: green=lending, blue=borrowing)
+- Transaction Detail (status timeline, role-specific fee breakdown with 2-decimal rounding on net amount calculations, messaging, ratings, dispute. Security deposit shown separately from total as blue callout — "Temporary hold — refunded after return" for active, "Refunded" with strikethrough for completed/cancelled; loading skeleton)
+- Dashboard (compact Action Center summary card with urgency-tinted border/background — shows actionable text per role, e.g. "Lending — 2 need response, 1 return to confirm" / "Borrowing — 2 with matches, 1 due soon". Leading dot pulses when red-tier actions exist. Per-row colored dot reflects that row's highest urgency. Rows link to /action-center with tab pre-selected. "View all N" links to /action-center All tab. Pending matches banner. Financial summary [earned/spent] in 2-column grid; quick actions; my listings count; my requests with nearby supply insight; rating with link to /my-ratings; active transactions by role)
+- Action Center (/action-center) — dedicated full-featured page with All/Lending/Borrowing tabs. All tab shows both sections with Lending/Borrowing subheadings. Lending tab: ActionCards for lending transactions sorted by urgency tier. Borrowing tab: MatchActionCards (requests with matches) + ActionCards (borrowing transactions). All inline quick-action buttons functional (accept, decline, confirm pickup, etc.). ConfirmDialog for decline. Back link to Dashboard. Loading skeleton. Empty state.
+- Profile (editable, clickable rating, collapsible "Change Password" section with current/new/confirm password fields, loading skeleton) / Public Profile (view others)
+- Notifications / Notification Settings
+- My Ratings (loading skeleton)
+
+
+UI COMPONENT LIBRARY
+====================
+- Button (5 variants: default/primary/secondary/outline/ghost, 3 sizes, loading spinner) — used consistently across UI, replaced inline buttons in Matches, Neighborhood, NotificationBell
+- Input / Textarea / Select (with label + error display)
+- Card (border, shadow, rounded, supports style prop for animation delays)
+- Modal (overlay, backdrop close, `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, entrance animation)
+- Badge (6 variants: default/primary/success/warning/danger/info; optional onClick prop renders as `<button>` with hover ring/brightness effects for interactive status badges)
+- Alert (4 types: success/error/warning/info with icons)
+- EmptyState (icon + title + description + variant prop: default/info/success/warning with themed backgrounds)
+- Spinner + LoadingPage
+- Loading Skeletons (layout-matched): ProfileSkeleton, ItemDetailSkeleton, TransactionDetailSkeleton, RequestDetailSkeleton — used on respective pages instead of generic LoadingPage
+- CategorySelector (3-tier hierarchical picker + fuzzy search with max 15 results + overflow indicator)
+- SpecsForm (dynamic per category, lender/borrower modes)
+- SpecsDisplay (read-only spec badges)
+- PricingSuggestions (clickable price ranges with float-safe formatting via Number.isInteger())
+- Tabs (ARIA `role="tablist"`, `role="tab"`, `aria-selected`, `role="tabpanel"`)
+- NotificationBell (dropdown with delayed badge clear, efficient click-outside, `aria-haspopup`, `aria-expanded`, `role="menu"` on dropdown)
+- NotificationItem (card with auto-navigation)
+- StarRating (reusable SVG star rating display, sm/md/lg sizes, accessibility aria-label)
+- ConfirmDialog (modal-based confirmation dialog replacing window.confirm, danger/warning/default variants) — used for logout confirmation
+- sonner (toast notification library — Toaster mounted in App.tsx, toast.success/error used in mutations)
+- ProtectedRoute (auth guard with redirect, wraps children in ErrorBoundary with key={location.pathname})
+- Layout / Header (active nav state highlighting) / Footer / PageContainer
+
+
+WHAT'S NOT BUILT YET
+====================
+- Real-time WebSockets (messaging/notifications are polling-based)
+- Actual file/photo upload (URLs only, no S3/Cloudinary)
+- Payment processing (fee math exists, no Stripe)
+- Email/SMS sending (stubs only)
+- Email verification / password reset
+- Admin panel
+- Map view for browsing
+- Docker / CI/CD / deployment config
+- Tests (no test framework or test files exist)
+
+
+SEED DATA
+=========
+- 12 test users (alice/bob/carol/david/emma/frank/grace/hank/irene/jake/kate/leo @example.com, password: "password123")
+- Realistic Fort Collins, CO locations
+- 16 sample items across categories
+- 3 sample requests with auto-generated matches
+- 1 completed transaction with ratings and messages
+
+
+GIT STATUS (as of 2026-02-13)
+==============================
+
+BACKEND (shareit-backend) — 800rob/good_neighbors
+- Branch: main
+- Latest commit: 2c3fd1c (optionalAuth logging)
+
+FRONTEND (good-neighbors-web) — 800rob/good-neighbors-web
+- Branch: master
+- Latest commit: b3d3055 (Action Center redesign)
+
+RECENT CHANGES:
+- Action Center redesign (b3d3055): Compact dashboard summary + dedicated /action-center page with All/Lending/Borrowing tabs
+- Batch 5 (026bf29): Proxy error handling, adaptive retry, typed pagination, consistent imports, focus-visible, optionalAuth logging
+- Batch 4 (various): UI polish, clickable badges, code quality
+- Batch 3 (9ae3e96): Rounding fixes, badge delay, search limit, scroll-to-error, button consistency, demand card colors
+- Batch 2 (d29fcd1): Logout confirm, sort label, draft save, animations, notification fixes
+- Batch 1 (151b344): Price formatting, fee preview, loading skeletons, active nav state
+- Total progress: 120/177 tracked items resolved
