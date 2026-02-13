@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const bcrypt = require('bcrypt');
 const { geocodeAddress } = require('../utils/geocoding');
 
 /**
@@ -82,6 +83,8 @@ async function getCurrentUser(req, res) {
  */
 async function updateCurrentUser(req, res) {
   const {
+    email,
+    currentPassword,
     firstName,
     middleName,
     lastName,
@@ -96,6 +99,26 @@ async function updateCurrentUser(req, res) {
     longitude,
     neighborhood
   } = req.body;
+
+  // If email is being changed, require password confirmation
+  if (email && email !== req.user.email) {
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required to change email' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, req.user.passwordHash);
+    if (!valid) {
+      return res.status(403).json({ error: 'Incorrect password' });
+    }
+
+    // Check if email is already taken
+    const existingEmail = await prisma.user.findFirst({
+      where: { email, id: { not: req.user.id } },
+    });
+    if (existingEmail) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+  }
 
   // Check if phone number is taken by another user
   if (phoneNumber) {
@@ -126,23 +149,30 @@ async function updateCurrentUser(req, res) {
     }
   }
 
+  const updateData = {
+    firstName,
+    middleName,
+    lastName,
+    phoneNumber,
+    profilePhotoUrl,
+    address,
+    address2,
+    city,
+    state,
+    zipCode,
+    latitude: finalLatitude,
+    longitude: finalLongitude,
+    neighborhood,
+  };
+
+  // Only include email if it's actually changing (and password was verified above)
+  if (email && email !== req.user.email) {
+    updateData.email = email;
+  }
+
   const user = await prisma.user.update({
     where: { id: req.user.id },
-    data: {
-      firstName,
-      middleName,
-      lastName,
-      phoneNumber,
-      profilePhotoUrl,
-      address,
-      address2,
-      city,
-      state,
-      zipCode,
-      latitude: finalLatitude,
-      longitude: finalLongitude,
-      neighborhood,
-    },
+    data: updateData,
   });
 
   // Build full name for display

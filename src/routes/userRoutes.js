@@ -23,6 +23,7 @@ router.put(
     body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
     body('middleName').optional().trim(),
     body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
+    body('email').optional().isEmail().withMessage('Invalid email address'),
     body('phoneNumber').optional().isMobilePhone().withMessage('Invalid phone number'),
     body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
     body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
