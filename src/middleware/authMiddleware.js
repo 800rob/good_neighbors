@@ -62,7 +62,8 @@ async function optionalAuth(req, res, next) {
 
     next();
   } catch (error) {
-    // Token invalid but optional, continue without user
+    // Token present but invalid — log for debugging, continue without user
+    console.warn(`[optionalAuth] Invalid token ignored: ${error.name} — ${error.message}`);
     next();
   }
 }
