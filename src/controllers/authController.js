@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/database');
 const jwtConfig = require('../config/jwt');
+const { COOKIE_NAME, COOKIE_OPTIONS } = require('../config/cookie');
 
 const SALT_ROUNDS = 10;
 
@@ -83,9 +84,9 @@ async function register(req, res) {
   // Build full name for display
   const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
 
+  res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
   res.status(201).json({
     message: 'User registered successfully',
-    token,
     user: {
       id: user.id,
       email: user.email,
@@ -135,9 +136,9 @@ async function login(req, res) {
   // Build full name for display
   const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
 
+  res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
   res.json({
     message: 'Login successful',
-    token,
     user: {
       id: user.id,
       email: user.email,
@@ -163,10 +164,7 @@ async function login(req, res) {
  * POST /api/auth/logout
  */
 async function logout(req, res) {
-  // In a production app, you might want to:
-  // - Add token to a blacklist
-  // - Clear refresh tokens from database
-  // For now, logout is handled client-side by removing the token
+  res.clearCookie(COOKIE_NAME, { path: '/' });
   res.json({ message: 'Logout successful' });
 }
 

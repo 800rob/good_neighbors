@@ -1,19 +1,35 @@
 const jwt = require('jsonwebtoken');
 const jwtConfig = require('../config/jwt');
 const prisma = require('../config/database');
+const { COOKIE_NAME } = require('../config/cookie');
+
+/**
+ * Extract JWT token from cookie or Authorization header.
+ * Cookie takes precedence; header is kept for backward compatibility.
+ */
+function extractToken(req) {
+  // 1. Try HTTP-only cookie
+  if (req.cookies && req.cookies[COOKIE_NAME]) {
+    return req.cookies[COOKIE_NAME];
+  }
+  // 2. Fall back to Authorization header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+  return null;
+}
 
 /**
  * Middleware to verify JWT token and attach user to request
  */
 async function authenticate(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const token = extractToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
-
-    const token = authHeader.split(' ')[1];
 
     const decoded = jwt.verify(token, jwtConfig.secret);
 
@@ -43,13 +59,12 @@ async function authenticate(req, res, next) {
  */
 async function optionalAuth(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const token = extractToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return next();
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, jwtConfig.secret);
 
     const user = await prisma.user.findUnique({
