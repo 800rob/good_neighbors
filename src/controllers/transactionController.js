@@ -460,13 +460,237 @@ async function updateTransactionStatus(req, res) {
   res.json(updatedTransaction);
 }
 
+const DISPUTE_CATEGORIES = [
+  'item_damaged',
+  'item_not_returned',
+  'wrong_item',
+  'late_return',
+  'fee_dispute',
+  'other',
+];
+
 /**
- * Flag a dispute
+ * File a dispute
  * PUT /api/transactions/:id/dispute
  */
 async function disputeTransaction(req, res) {
-  req.body.status = 'disputed';
-  return updateTransactionStatus(req, res);
+  const { id } = req.params;
+  const { disputeReason, disputeCategory } = req.body;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  // Can only dispute from certain statuses
+  const disputableStatuses = ['accepted', 'pickup_confirmed', 'active', 'return_initiated', 'return_confirmed', 'completed'];
+  if (!disputableStatuses.includes(transaction.status)) {
+    return res.status(400).json({ error: `Cannot dispute a transaction with status "${transaction.status}"` });
+  }
+
+  if (!disputeReason) {
+    return res.status(400).json({ error: 'Dispute reason is required' });
+  }
+
+  if (disputeCategory && !DISPUTE_CATEGORIES.includes(disputeCategory)) {
+    return res.status(400).json({ error: 'Invalid dispute category' });
+  }
+
+  const previousStatus = transaction.status;
+  const updatedTransaction = await prisma.transaction.update({
+    where: { id },
+    data: {
+      status: 'disputed',
+      disputeReason,
+      disputeCategory: disputeCategory || 'other',
+      disputeFiledBy: req.user.id,
+      disputeFiledAt: new Date(),
+    },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  // Audit log
+  prisma.transactionAuditLog.create({
+    data: {
+      transactionId: id,
+      userId: req.user.id,
+      fromStatus: previousStatus,
+      toStatus: 'disputed',
+      action: 'disputed',
+      metadata: { disputeReason, disputeCategory: disputeCategory || 'other' },
+    },
+  }).catch(err => console.error('[AuditLog] Failed to log dispute:', err.message));
+
+  // Notify counter-party
+  const counterPartyId = req.user.id === transaction.borrowerId
+    ? transaction.lenderId
+    : transaction.borrowerId;
+
+  const borrowerName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
+  const lenderName = [transaction.lender.firstName, transaction.lender.lastName].filter(Boolean).join(' ');
+
+  await notifyUser(counterPartyId, 'transaction_disputed', {
+    transactionId: id,
+    itemId: transaction.item.id,
+    itemTitle: transaction.item.title,
+    borrowerId: transaction.borrowerId,
+    borrowerName,
+    lenderId: transaction.lenderId,
+    lenderName,
+  });
+
+  res.json(updatedTransaction);
+}
+
+/**
+ * Respond to a dispute (counter-party)
+ * PUT /api/transactions/:id/dispute/respond
+ */
+async function respondToDispute(req, res) {
+  const { id } = req.params;
+  const { disputeResponse } = req.body;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  if (transaction.status !== 'disputed') {
+    return res.status(400).json({ error: 'Transaction is not in disputed status' });
+  }
+
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  // Only counter-party can respond
+  if (req.user.id === transaction.disputeFiledBy) {
+    return res.status(400).json({ error: 'The dispute filer cannot respond to their own dispute' });
+  }
+
+  if (!disputeResponse || !disputeResponse.trim()) {
+    return res.status(400).json({ error: 'Response text is required' });
+  }
+
+  const updatedTransaction = await prisma.transaction.update({
+    where: { id },
+    data: {
+      disputeResponse: disputeResponse.trim(),
+      disputeRespondedAt: new Date(),
+    },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  // Notify the filer that counter-party responded
+  await notifyUser(transaction.disputeFiledBy, 'dispute_response', {
+    transactionId: id,
+    itemId: transaction.item.id,
+    itemTitle: transaction.item.title,
+  });
+
+  res.json(updatedTransaction);
+}
+
+/**
+ * Resolve a dispute
+ * PUT /api/transactions/:id/dispute/resolve
+ */
+async function resolveDispute(req, res) {
+  const { id } = req.params;
+  const { disputeResolution, disputeResolutionNotes } = req.body;
+
+  const validResolutions = ['resolved_for_borrower', 'resolved_for_lender', 'mutual_agreement'];
+  if (!validResolutions.includes(disputeResolution)) {
+    return res.status(400).json({ error: 'Invalid resolution type' });
+  }
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  if (transaction.status !== 'disputed') {
+    return res.status(400).json({ error: 'Transaction is not in disputed status' });
+  }
+
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  const updatedTransaction = await prisma.transaction.update({
+    where: { id },
+    data: {
+      status: 'completed',
+      disputeResolution,
+      disputeResolvedAt: new Date(),
+      disputeResolutionNotes: disputeResolutionNotes?.trim() || null,
+    },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  // Audit log
+  prisma.transactionAuditLog.create({
+    data: {
+      transactionId: id,
+      userId: req.user.id,
+      fromStatus: 'disputed',
+      toStatus: 'completed',
+      action: 'dispute_resolved',
+      metadata: { disputeResolution, disputeResolutionNotes: disputeResolutionNotes?.trim() || null },
+    },
+  }).catch(err => console.error('[AuditLog] Failed to log dispute resolution:', err.message));
+
+  // Notify both parties
+  const notificationContext = {
+    transactionId: id,
+    itemId: transaction.item.id,
+    itemTitle: transaction.item.title,
+  };
+
+  await notifyUser(transaction.borrowerId, 'dispute_resolved', notificationContext);
+  await notifyUser(transaction.lenderId, 'dispute_resolved', notificationContext);
+
+  res.json(updatedTransaction);
 }
 
 module.exports = {
@@ -475,4 +699,6 @@ module.exports = {
   getMyTransactions,
   updateTransactionStatus,
   disputeTransaction,
+  respondToDispute,
+  resolveDispute,
 };

@@ -297,6 +297,14 @@ model Transaction {
   paymentStatus    PaymentStatus     @default(pending) @map("payment_status")
   paymentIntentId  String?           @map("payment_intent_id")
   disputeReason    String?           @map("dispute_reason") @db.Text
+  disputeCategory  String?           @map("dispute_category")
+  disputeFiledBy   String?           @map("dispute_filed_by") @db.Uuid
+  disputeFiledAt   DateTime?         @map("dispute_filed_at")
+  disputeResponse  String?           @map("dispute_response") @db.Text
+  disputeRespondedAt DateTime?       @map("dispute_responded_at")
+  disputeResolution String?          @map("dispute_resolution")
+  disputeResolvedAt DateTime?        @map("dispute_resolved_at")
+  disputeResolutionNotes String?     @map("dispute_resolution_notes") @db.Text
   returnReminderSent Boolean         @default(false) @map("return_reminder_sent")
   overdueNotificationSent Boolean    @default(false) @map("overdue_notification_sent")
   createdAt        DateTime          @default(now()) @map("created_at")

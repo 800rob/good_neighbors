@@ -6,6 +6,8 @@ const {
   getMyTransactions,
   updateTransactionStatus,
   disputeTransaction,
+  respondToDispute,
+  resolveDispute,
 } = require('../controllers/transactionController');
 const { sendMessage, getMessages } = require('../controllers/messageController');
 const { submitRating, getTransactionRatings } = require('../controllers/ratingController');
@@ -94,9 +96,45 @@ router.put(
       .trim()
       .notEmpty()
       .withMessage('Dispute reason is required'),
+    body('disputeCategory')
+      .optional()
+      .isIn(['item_damaged', 'item_not_returned', 'wrong_item', 'late_return', 'fee_dispute', 'other'])
+      .withMessage('Invalid dispute category'),
   ],
   handleValidationErrors,
   asyncHandler(disputeTransaction)
+);
+
+// PUT /api/transactions/:id/dispute/respond
+router.put(
+  '/:id/dispute/respond',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
+    body('disputeResponse')
+      .trim()
+      .notEmpty()
+      .withMessage('Response text is required'),
+  ],
+  handleValidationErrors,
+  asyncHandler(respondToDispute)
+);
+
+// PUT /api/transactions/:id/dispute/resolve
+router.put(
+  '/:id/dispute/resolve',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
+    body('disputeResolution')
+      .isIn(['resolved_for_borrower', 'resolved_for_lender', 'mutual_agreement'])
+      .withMessage('Invalid resolution type'),
+    body('disputeResolutionNotes')
+      .optional()
+      .trim(),
+  ],
+  handleValidationErrors,
+  asyncHandler(resolveDispute)
 );
 
 // Messages

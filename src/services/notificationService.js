@@ -57,6 +57,16 @@ const NOTIFICATION_TYPES = {
     defaultEmail: true,
     defaultSms: false,
   },
+  dispute_response: {
+    defaultInApp: true,
+    defaultEmail: true,
+    defaultSms: false,
+  },
+  dispute_resolved: {
+    defaultInApp: true,
+    defaultEmail: true,
+    defaultSms: false,
+  },
   message_received: {
     defaultInApp: true,
     defaultEmail: false,
@@ -151,6 +161,14 @@ function getNotificationContent(type, context) {
     transaction_disputed: {
       title: 'Transaction Disputed',
       message: `A dispute has been raised for "${context.itemTitle}". Please review the details.`,
+    },
+    dispute_response: {
+      title: 'Dispute Response Received',
+      message: `The other party has responded to your dispute about "${context.itemTitle}". Review their response.`,
+    },
+    dispute_resolved: {
+      title: 'Dispute Resolved',
+      message: `The dispute for "${context.itemTitle}" has been resolved.`,
     },
     message_received: {
       title: 'New Message',
