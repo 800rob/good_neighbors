@@ -121,7 +121,7 @@ async function main() {
         lateFeeAmount: 10,
         protectionPreference: 'let_me_decide',
         depositPercentage: 50,
-        photoUrls: ['https://example.com/drill1.jpg'],
+        photoUrls: [],
       },
     }),
     prisma.item.create({
@@ -138,7 +138,7 @@ async function main() {
         lateFeeAmount: 15,
         protectionPreference: 'deposit_required',
         depositPercentage: 50,
-        photoUrls: ['https://example.com/pressure1.jpg'],
+        photoUrls: [],
       },
     }),
 
@@ -156,7 +156,7 @@ async function main() {
         priceAmount: 20,
         lateFeeAmount: 15,
         protectionPreference: 'insurance_required',
-        photoUrls: ['https://example.com/tent1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1629580600442-d77795f7efd3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxjYW1waW5nJTIwdGVudCUyMG91dGRvb3JzJTIwZm9yZXN0fGVufDB8Mnx8fDE3NzExOTg2NzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -173,7 +173,7 @@ async function main() {
         lateFeeAmount: 25,
         protectionPreference: 'deposit_required',
         depositPercentage: 30,
-        photoUrls: ['https://example.com/bike1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1673121414555-e9c178fb7826?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxtb3VudGFpbiUyMGJpa2UlMjB0cmFpbCUyMHJpZGluZ3xlbnwwfDJ8fHwxNzcxMTk4Njc5fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -190,7 +190,7 @@ async function main() {
         pricingType: 'daily',
         priceAmount: 30,
         protectionPreference: 'waiver_ok',
-        photoUrls: ['https://example.com/tables1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1586939731615-bd3396cbd440?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxmb2xkaW5nJTIwdGFibGVzJTIwZXZlbnQlMjBzZXR1cHxlbnwwfDJ8fHwxNzcxMTk4NjgxfDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -207,7 +207,7 @@ async function main() {
         lateFeeAmount: 30,
         protectionPreference: 'deposit_required',
         depositPercentage: 40,
-        photoUrls: ['https://example.com/speaker1.jpg'],
+        photoUrls: [],
       },
     }),
 
@@ -225,7 +225,7 @@ async function main() {
         priceAmount: 35,
         lateFeeAmount: 25,
         protectionPreference: 'insurance_required',
-        photoUrls: ['https://example.com/mitersaw1.jpg'],
+        photoUrls: [],
       },
     }),
     prisma.item.create({
@@ -242,7 +242,7 @@ async function main() {
         lateFeeAmount: 20,
         protectionPreference: 'deposit_required',
         depositPercentage: 30,
-        photoUrls: ['https://example.com/mower1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1742232104913-2bf24cfe9f6d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxsYXduJTIwbW93ZXIlMjBncmFzcyUyMGN1dHRpbmd8ZW58MHwyfHx8MTc3MTE5ODY4Mnww&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -260,7 +260,7 @@ async function main() {
         priceAmount: 40,
         lateFeeAmount: 30,
         protectionPreference: 'insurance_required',
-        photoUrls: ['https://example.com/trailer1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1647686898085-ef3c0bd74f43?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHx1dGlsaXR5JTIwdHJhaWxlciUyMGhhdWxpbmd8ZW58MHwyfHx8MTc3MTE5ODY4NHww&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -275,7 +275,7 @@ async function main() {
         pricingType: 'daily',
         priceAmount: 15,
         protectionPreference: 'waiver_ok',
-        photoUrls: ['https://example.com/dolly1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1742155441086-646419ee8670?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxhcHBsaWFuY2UlMjBkb2xseSUyMGhhbmQlMjB0cnVjayUyMG1vdmluZ3xlbnwwfDJ8fHwxNzcxMTk4Njg1fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -292,7 +292,7 @@ async function main() {
         pricingType: 'hourly',
         priceAmount: 10,
         protectionPreference: 'waiver_ok',
-        photoUrls: ['https://example.com/garage1.jpg'],
+        photoUrls: [],
       },
     }),
     prisma.item.create({
@@ -309,7 +309,7 @@ async function main() {
         lateFeeAmount: 30,
         protectionPreference: 'deposit_required',
         depositPercentage: 40,
-        photoUrls: ['https://example.com/tablesaw1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1565791380713-1756b9a05343?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHx0YWJsZSUyMHNhdyUyMHdvb2R3b3JraW5nJTIwd29ya3Nob3B8ZW58MHwyfHx8MTc3MTE5ODY3M3ww&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -325,7 +325,7 @@ async function main() {
         replacementValue: 50,
         pricingType: 'free',
         protectionPreference: 'waiver_ok',
-        photoUrls: ['https://example.com/toolset1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1625133379631-8684c1e9f722?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxiYXNpYyUyMHRvb2wlMjBzZXQlMjBoYW1tZXIlMjBzY3Jld2RyaXZlcnxlbnwwfDJ8fHwxNzcxMTk4Njg3fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -339,7 +339,7 @@ async function main() {
         replacementValue: 30,
         pricingType: 'free',
         protectionPreference: 'waiver_ok',
-        photoUrls: ['https://example.com/decorations1.jpg'],
+        photoUrls: ['https://images.unsplash.com/photo-1574276254982-d209f79d673a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxwYXJ0eSUyMGRlY29yYXRpb25zJTIwYmFsbG9vbnMlMjBzdHJlYW1lcnN8ZW58MHwyfHx8MTc3MTE5ODY4OHww&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -356,7 +356,7 @@ async function main() {
         pricingType: 'hourly',
         priceAmount: 25,
         protectionPreference: 'waiver_ok',
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1571115637435-26e423673f7b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxoYW5keW1hbiUyMGhvbWUlMjByZXBhaXIlMjB0b29sc3xlbnwwfDJ8fHwxNzcxMTk4Njc3fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
   ]);

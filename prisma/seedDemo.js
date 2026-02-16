@@ -185,7 +185,7 @@ async function main() {
       lateFeeAmount: 25,
       protectionPreference: 'deposit_required',
       depositPercentage: 40,
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1755547721485-1a717d61a54b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxwb3dkZXIlMjBza2lzJTIwZGVlcCUyMHNub3clMjBza2lpbmd8ZW58MHwyfHx8MTc3MTE5ODY5MHww&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           sizeCm: { value: 180 },
@@ -365,7 +365,7 @@ async function main() {
       lateFeeAmount: 10,
       protectionPreference: 'deposit_required',
       depositPercentage: 40,
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1657095544219-6328434702a8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxjaXJjdWxhciUyMHNhdyUyMGNvcmRsZXNzJTIwY3V0dGluZyUyMHdvb2R8ZW58MHwyfHx8MTc3MTE5ODY5M3ww&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           powerSource: { value: 'Cordless (Battery)' },
@@ -427,7 +427,7 @@ async function main() {
       lateFeeAmount: 30,
       protectionPreference: 'deposit_required',
       depositPercentage: 40,
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1565791380713-1756b9a05343?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHx0YWJsZSUyMHNhdyUyMHdvb2R3b3JraW5nJTIwd29ya3Nob3B8ZW58MHwyfHx8MTc3MTE5ODY3M3ww&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           powerSource: { value: 'Corded' },
@@ -458,7 +458,7 @@ async function main() {
       priceAmount: 20,
       lateFeeAmount: 15,
       protectionPreference: 'waiver_ok',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1746950061282-be919bf6c570?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxleHRlbnNpb24lMjBsYWRkZXIlMjBmaWJlcmdsYXNzJTIwdGFsbHxlbnwwfDJ8fHwxNzcxMTk4Njk1fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           heightFt: { value: 20 },
@@ -577,7 +577,7 @@ async function main() {
       priceAmount: 100,
       lateFeeAmount: 75,
       protectionPreference: 'insurance_required',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1631433048456-42126b541bfb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxmb3JkJTIwZjI1MCUyMHBpY2t1cCUyMHRydWNrfGVufDB8Mnx8fDE3NzExOTg2OTd8MA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           towCapacity: { value: 12000 },
@@ -637,7 +637,7 @@ async function main() {
       priceAmount: 75,
       lateFeeAmount: 50,
       protectionPreference: 'insurance_required',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1612810033524-dc632d5fb19d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxjYW5vbiUyMGRzbHIlMjBjYW1lcmElMjBsZW5zJTIwcGhvdG9ncmFwaHl8ZW58MHwyfHx8MTc3MTE5ODY5OXww&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           brand: { value: 'Canon' },
@@ -734,7 +734,7 @@ async function main() {
       lateFeeAmount: 15,
       protectionPreference: 'deposit_required',
       depositPercentage: 30,
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1629580600442-d77795f7efd3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxjYW1waW5nJTIwdGVudCUyMG91dGRvb3JzJTIwZm9yZXN0fGVufDB8Mnx8fDE3NzExOTg2NzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           brand: { value: 'REI' },
@@ -765,7 +765,7 @@ async function main() {
       priceAmount: 50,
       lateFeeAmount: 35,
       protectionPreference: 'insurance_required',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1672257278876-b9142b7493cc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxwb3J0YWJsZSUyMGdlbmVyYXRvciUyMGhvbmRhJTIwY2FtcGluZ3xlbnwwfDJ8fHwxNzcxMTk4NzAwfDA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           watts: { value: 2200 },
@@ -797,7 +797,7 @@ async function main() {
       pricingType: 'hourly',
       priceAmount: 35,
       protectionPreference: 'waiver_ok',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1571115637435-26e423673f7b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxoYW5keW1hbiUyMGhvbWUlMjByZXBhaXIlMjB0b29sc3xlbnwwfDJ8fHwxNzcxMTk4Njc3fDA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           yearsExperience: { value: 12 },
@@ -824,7 +824,7 @@ async function main() {
       pricingType: 'hourly',
       priceAmount: 55,
       protectionPreference: 'waiver_ok',
-      photoUrls: [],
+      photoUrls: ['https://images.unsplash.com/photo-1764852865537-fa1b0b4885cf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxtb3ZpbmclMjBoZWxwZXJzJTIwY2FycnlpbmclMjBmdXJuaXR1cmUlMjB0cnVja3xlbnwwfDJ8fHwxNzcxMTk4NzAyfDA&ixlib=rb-4.1.0&q=80&w=1080'],
       details: {
         specs: {
           numHelpers: { value: 2 },
