@@ -21,6 +21,7 @@ const insightsRoutes = require('./routes/insightsRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const favoriteRoutes = require('./routes/favoriteRoutes');
+const geocodeRoutes = require('./routes/geocodeRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,6 +66,7 @@ app.use('/api/insights', insightsRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/favorites', favoriteRoutes);
+app.use('/api/geocode', geocodeRoutes);
 
 // 404 handler
 app.use((req, res) => {
