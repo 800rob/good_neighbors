@@ -3,6 +3,7 @@ const { notifyUser } = require('../services/notificationService');
 const { calculateFees } = require('../utils/feeCalculation');
 const { getTaxRate } = require('../utils/taxRates');
 const { hasDateConflict } = require('../utils/dateConflict');
+const { refreshMatchGroups } = require('../utils/matchGrouping');
 
 /**
  * Respond to a match (lender accepts or declines)
@@ -181,6 +182,13 @@ async function respondToMatch(req, res) {
       lenderName: lenderFullName,
       requestId: updatedMatch.requestId,
     });
+  }
+
+  // Refresh match groups when a match is declined (group may drop below 2)
+  if (response === 'declined') {
+    refreshMatchGroups(updatedMatch.request.requesterId).catch(err =>
+      console.error('[MatchGrouping] Failed to refresh after match decline:', err.message)
+    );
   }
 
   res.json({
@@ -394,35 +402,35 @@ async function respondToBundle(req, res) {
     return updated;
   });
 
-  // Send notifications outside the transaction
-  for (const match of updatedMatches) {
-    const response = responseMap[match.id];
-    const lenderFullName = [match.item?.owner?.firstName || matches.find(m => m.id === match.id)?.item?.owner?.firstName,
-      match.item?.owner?.lastName || matches.find(m => m.id === match.id)?.item?.owner?.lastName].filter(Boolean).join(' ');
+  // Send a single consolidated notification instead of per-item notifications
+  const acceptedItems = updatedMatches.filter(m => responseMap[m.id] === 'accepted');
+  const declinedItems = updatedMatches.filter(m => responseMap[m.id] === 'declined');
+  const requesterId = updatedMatches[0].request.requesterId;
+  const firstOriginal = matches.find(m => m.id === updatedMatches[0].id);
+  const lenderFullName = [
+    firstOriginal?.item?.owner?.firstName,
+    firstOriginal?.item?.owner?.lastName,
+  ].filter(Boolean).join(' ');
 
-    if (response === 'accepted') {
-      await notifyUser(match.request.requesterId, 'match_accepted', {
-        matchId: match.id,
-        itemId: match.itemId,
-        itemTitle: match.item?.title,
-        lenderId: match.item?.ownerId,
-        lenderName: lenderFullName,
-        requestId: match.requestId,
-      });
-    } else {
-      await notifyUser(match.request.requesterId, 'match_declined', {
-        matchId: match.id,
-        itemId: match.itemId,
-        itemTitle: match.item?.title,
-        lenderId: match.item?.ownerId,
-        lenderName: lenderFullName,
-        requestId: match.requestId,
-      });
-    }
-  }
+  await notifyUser(requesterId, 'bundle_responded', {
+    lenderName: lenderFullName,
+    lenderId: firstOriginal?.item?.ownerId,
+    bundleId,
+    requestId: updatedMatches[0].requestId,
+    acceptedCount: acceptedItems.length,
+    declinedCount: declinedItems.length,
+    totalCount: updatedMatches.length,
+    acceptedItems: acceptedItems.map(m => m.item?.title).join(', '),
+    declinedItems: declinedItems.map(m => m.item?.title).join(', '),
+  });
 
   const acceptedCount = updatedMatches.filter(m => responseMap[m.id] === 'accepted').length;
   const declinedCount = updatedMatches.length - acceptedCount;
+
+  // Refresh match groups after bundle response
+  refreshMatchGroups(requesterId).catch(err =>
+    console.error('[MatchGrouping] Failed to refresh after respondToBundle:', err.message)
+  );
 
   res.json({
     matches: updatedMatches,

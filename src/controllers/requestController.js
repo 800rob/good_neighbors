@@ -2,6 +2,7 @@ const prisma = require('../config/database');
 const { findMatchesForRequest } = require('../utils/matching');
 const { getSpecsForItem, validateBorrowerSpecs } = require('../utils/specUtils');
 const { isAvailableForDates, getItemIdsWithConflicts } = require('../utils/dateConflict');
+const { refreshMatchGroups } = require('../utils/matchGrouping');
 
 /**
  * Create a new request (borrower posts need)
@@ -337,6 +338,11 @@ async function cancelRequest(req, res) {
         data: { status: 'cancelled' },
       });
     });
+
+    // Refresh match groups after cancellation (group may drop below 2)
+    refreshMatchGroups(req.user.id).catch(err =>
+      console.error('[MatchGrouping] Failed to refresh after request cancel:', err.message)
+    );
 
     res.json(updatedRequest);
   } catch (err) {

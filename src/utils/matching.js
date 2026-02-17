@@ -3,6 +3,7 @@ const { calculateDistance } = require('./distance');
 const { notifyUser } = require('../services/notificationService');
 const { getSpecsForItem } = require('./specUtils');
 const { getItemIdsWithConflicts, hasDateConflict, isAvailableForDates } = require('./dateConflict');
+const { refreshMatchGroups } = require('./matchGrouping');
 
 /**
  * Extract keywords from text (removes common stop words)
@@ -467,6 +468,11 @@ async function findMatchesForRequest(requestId) {
     });
   }
 
+  // Refresh algorithmic match groups for this borrower
+  refreshMatchGroups(request.requesterId).catch(err =>
+    console.error('[MatchGrouping] Failed to refresh after findMatchesForRequest:', err.message)
+  );
+
   // Return created matches with full details
   return prisma.match.findMany({
     where: { requestId },
@@ -898,6 +904,17 @@ async function findRequestsForItem(itemId) {
       itemTitle: item.title,
       itemPrice,
     });
+  }
+
+  // Refresh algorithmic match groups for each affected borrower
+  const borrowerIds = [...new Set(newMatches.map(m => {
+    const req = requests.find(r => r.id === m.requestId);
+    return req?.requesterId;
+  }).filter(Boolean))];
+  for (const bid of borrowerIds) {
+    refreshMatchGroups(bid).catch(err =>
+      console.error('[MatchGrouping] Failed to refresh after findRequestsForItem:', err.message)
+    );
   }
 
   // Return created matches with full details

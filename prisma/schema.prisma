@@ -128,6 +128,15 @@ enum BundleRequestStatus {
   cancelled
 }
 
+enum MatchGroupStatus {
+  suggested    // Algorithm detected opportunity
+  notified     // Users informed
+  accepted     // Lender accepted all
+  partial      // Some accepted, some pending/declined
+  transacted   // Multi-item transaction created
+  expired      // Underlying requests expired/cancelled or <2 matches remain
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -170,6 +179,8 @@ model User {
   auditLogs               TransactionAuditLog[]
   bundles                 Bundle[]
   bundleRequests          BundleRequest[]
+  borrowerMatchGroups     MatchGroup[] @relation("BorrowerMatchGroups")
+  lenderMatchGroups       MatchGroup[] @relation("LenderMatchGroups")
 
   @@index([latitude, longitude], name: "idx_user_location")
   @@index([neighborhood], name: "idx_user_neighborhood")
@@ -622,4 +633,25 @@ model TransactionItem {
   @@index([transactionId])
   @@index([itemId])
   @@map("transaction_items")
+}
+
+/// MatchGroup - Algorithmic grouping of matches by borrower-lender pair
+model MatchGroup {
+  id          String           @id @default(uuid()) @db.Uuid
+  borrowerId  String           @map("borrower_id") @db.Uuid
+  lenderId    String           @map("lender_id") @db.Uuid
+  score       Decimal          @db.Decimal(4, 1)
+  matchCount  Int              @map("match_count")
+  status      MatchGroupStatus @default(suggested)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  borrower    User @relation("BorrowerMatchGroups", fields: [borrowerId], references: [id], onDelete: Cascade)
+  lender      User @relation("LenderMatchGroups", fields: [lenderId], references: [id], onDelete: Cascade)
+
+  @@unique([borrowerId, lenderId], name: "uq_match_group_borrower_lender")
+  @@index([borrowerId])
+  @@index([lenderId])
+  @@index([status])
+  @@map("match_groups")
 }

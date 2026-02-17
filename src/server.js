@@ -23,6 +23,7 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const favoriteRoutes = require('./routes/favoriteRoutes');
 const geocodeRoutes = require('./routes/geocodeRoutes');
 const bundleRoutes = require('./routes/bundleRoutes');
+const matchGroupRoutes = require('./routes/matchGroupRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,6 +70,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/bundles', bundleRoutes);
+app.use('/api/match-groups', matchGroupRoutes);
 
 // 404 handler
 app.use((req, res) => {

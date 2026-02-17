@@ -3,6 +3,7 @@ const { notifyUser } = require('../services/notificationService');
 const { calculateFees } = require('../utils/feeCalculation');
 const { getTaxRate } = require('../utils/taxRates');
 const { hasDateConflict, isAvailableForDates } = require('../utils/dateConflict');
+const { refreshMatchGroups } = require('../utils/matchGrouping');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -391,6 +392,33 @@ async function updateTransactionStatus(req, res) {
         where: { id: transaction.requestId },
         data: { status: matchCount > 0 ? 'matched' : 'open' },
       });
+    }
+  }
+
+  // If cancelling a bundle transaction, revert all associated requests
+  if (status === 'cancelled' && transaction.bundleId) {
+    const bundleRequests = await prisma.request.findMany({
+      where: { bundleId: transaction.bundleId, status: 'accepted' },
+    });
+    for (const req of bundleRequests) {
+      const otherActive = await prisma.transaction.count({
+        where: {
+          OR: [
+            { requestId: req.id },
+            { bundleId: req.bundleId, id: { not: id } },
+          ],
+          status: { notIn: ['cancelled', 'declined'] },
+        },
+      });
+      if (otherActive === 0) {
+        const matchCount = await prisma.match.count({
+          where: { requestId: req.id, lenderResponse: { not: 'declined' } },
+        });
+        await prisma.request.update({
+          where: { id: req.id },
+          data: { status: matchCount > 0 ? 'matched' : 'open' },
+        });
+      }
     }
   }
 
@@ -1125,10 +1153,234 @@ async function createBundleRequestTransaction(req, res) {
   res.status(201).json(transaction);
 }
 
+/**
+ * Create a multi-item transaction from a match group
+ * POST /api/transactions/match-group
+ */
+async function createMatchGroupTransaction(req, res) {
+  const { matchGroupId, matchIds, pickupTime, returnTime, protectionType } = req.body;
+
+  if (!matchGroupId || !matchIds?.length) {
+    return res.status(400).json({ error: 'matchGroupId and matchIds are required' });
+  }
+  if (!pickupTime || !returnTime) {
+    return res.status(400).json({ error: 'Both pickupTime and returnTime are required' });
+  }
+  const pickup = new Date(pickupTime);
+  const returnDate = new Date(returnTime);
+  if (isNaN(pickup.getTime()) || isNaN(returnDate.getTime())) {
+    return res.status(400).json({ error: 'Invalid date format' });
+  }
+  if (pickup >= returnDate) {
+    return res.status(400).json({ error: 'Pickup time must be before return time' });
+  }
+
+  // Fetch the match group
+  const matchGroup = await prisma.matchGroup.findUnique({
+    where: { id: matchGroupId },
+  });
+  if (!matchGroup) {
+    return res.status(404).json({ error: 'Match group not found' });
+  }
+  if (matchGroup.borrowerId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to create transaction for this match group' });
+  }
+
+  // Fetch all matches with item + owner + request
+  const matches = await prisma.match.findMany({
+    where: { id: { in: matchIds } },
+    include: {
+      item: { include: { owner: true } },
+      request: true,
+    },
+  });
+
+  if (matches.length !== matchIds.length) {
+    return res.status(404).json({ error: 'One or more matches not found' });
+  }
+
+  // Validate all matches belong to this group's borrower-lender pair
+  for (const match of matches) {
+    if (match.item.ownerId !== matchGroup.lenderId) {
+      return res.status(400).json({ error: `Match ${match.id} does not belong to this match group` });
+    }
+    if (match.request.requesterId !== matchGroup.borrowerId) {
+      return res.status(400).json({ error: `Match ${match.id} does not belong to this match group` });
+    }
+  }
+
+  // Validate no matches are declined
+  const declined = matches.filter(m => m.lenderResponse === 'declined');
+  if (declined.length > 0) {
+    return res.status(400).json({ error: 'One or more matches have been declined by the lender' });
+  }
+
+  // Check all items are available
+  const unavailable = matches.filter(m => !m.item.isAvailable);
+  if (unavailable.length > 0) {
+    return res.status(400).json({
+      error: 'Some items are unavailable',
+      unavailableItems: unavailable.map(m => ({ id: m.item.id, title: m.item.title })),
+    });
+  }
+
+  const items = matches.map(m => m.item);
+  const ownerId = matchGroup.lenderId;
+
+  const transaction = await prisma.$transaction(async (tx) => {
+    // Auto-accept any pending matches
+    const pendingMatchIds = matches.filter(m => m.lenderResponse === 'pending').map(m => m.id);
+    if (pendingMatchIds.length > 0) {
+      await tx.match.updateMany({
+        where: { id: { in: pendingMatchIds } },
+        data: { lenderResponse: 'accepted', respondedAt: new Date() },
+      });
+    }
+
+    // Date conflict check for each item
+    for (const item of items) {
+      const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+      if (conflict.hasConflict) {
+        const err = new Error(`"${item.title}" is already booked during the requested dates`);
+        err.statusCode = 409;
+        err.itemId = item.id;
+        err.itemTitle = item.title;
+        throw err;
+      }
+      if (!isAvailableForDates(item, pickupTime, returnTime)) {
+        const err = new Error(`"${item.title}" is not available during the requested dates`);
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+
+    // Calculate fees for each item
+    const ownerState = items[0].owner.state;
+    const taxRate = getTaxRate(ownerState);
+    const itemFees = items.map(item => ({
+      item,
+      fees: calculateFees(item, pickupTime, returnTime, protectionType, taxRate),
+    }));
+
+    // Sum all fees
+    const totalRentalFee = itemFees.reduce((sum, f) => sum + f.fees.rentalFee, 0);
+    const totalPlatformFee = itemFees.reduce((sum, f) => sum + f.fees.platformFee, 0);
+    const totalTaxAmount = itemFees.reduce((sum, f) => sum + f.fees.taxAmount, 0);
+    const totalDepositAmount = itemFees.reduce((sum, f) => sum + (f.fees.depositAmount || 0), 0);
+    const totalInsuranceFee = itemFees.reduce((sum, f) => sum + (f.fees.insuranceFee || 0), 0);
+    const totalCharged = itemFees.reduce((sum, f) => sum + f.fees.totalCharged, 0);
+
+    const primaryItemId = items[0].id;
+
+    // Create the transaction
+    const txn = await tx.transaction.create({
+      data: {
+        itemId: primaryItemId,
+        borrowerId: req.user.id,
+        lenderId: ownerId,
+        pickupTime: new Date(pickupTime),
+        returnTime: new Date(returnTime),
+        rentalFee: parseFloat(totalRentalFee.toFixed(2)),
+        platformFee: parseFloat(totalPlatformFee.toFixed(2)),
+        taxRate: taxRate,
+        taxAmount: parseFloat(totalTaxAmount.toFixed(2)),
+        protectionType,
+        depositAmount: totalDepositAmount > 0 ? parseFloat(totalDepositAmount.toFixed(2)) : null,
+        insuranceFee: totalInsuranceFee > 0 ? parseFloat(totalInsuranceFee.toFixed(2)) : null,
+        totalCharged: parseFloat(totalCharged.toFixed(2)),
+      },
+    });
+
+    // Create TransactionItem rows for per-item breakdown
+    await tx.transactionItem.createMany({
+      data: itemFees.map(({ item, fees }) => ({
+        transactionId: txn.id,
+        itemId: item.id,
+        rentalFee: fees.rentalFee,
+        platformFee: fees.platformFee,
+        depositAmount: fees.depositAmount,
+        insuranceFee: fees.insuranceFee,
+        taxAmount: fees.taxAmount,
+      })),
+    });
+
+    // Update all related requests to accepted status
+    const requestIds = [...new Set(matches.map(m => m.requestId))];
+    await tx.request.updateMany({
+      where: { id: { in: requestIds }, status: { in: ['open', 'matched'] } },
+      data: { status: 'accepted' },
+    });
+
+    // Update the match group status to transacted
+    await tx.matchGroup.update({
+      where: { id: matchGroupId },
+      data: { status: 'transacted' },
+    });
+
+    // Re-fetch with includes
+    return tx.transaction.findUnique({
+      where: { id: txn.id },
+      include: {
+        item: true,
+        borrower: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
+        lender: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
+        transactionItems: {
+          include: {
+            item: {
+              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+  }).catch((err) => {
+    if (err.statusCode === 409) {
+      return res.status(409).json({
+        error: err.message,
+        itemId: err.itemId,
+        itemTitle: err.itemTitle,
+      });
+    }
+    throw err;
+  });
+
+  if (res.headersSent) return;
+
+  // Audit log
+  prisma.transactionAuditLog.create({
+    data: {
+      transactionId: transaction.id,
+      userId: req.user.id,
+      fromStatus: null,
+      toStatus: 'requested',
+      action: 'created',
+      metadata: { matchGroupId, itemCount: items.length, type: 'match_group' },
+    },
+  }).catch(err => console.error('[AuditLog] Failed to log match group transaction creation:', err.message));
+
+  // Notify lender
+  const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
+  await notifyUser(ownerId, 'transaction_requested', {
+    transactionId: transaction.id,
+    itemId: items[0].id,
+    itemTitle: `Multi-item (${items.length} items)`,
+    borrowerId: req.user.id,
+    borrowerName: borrowerFullName,
+  });
+
+  res.status(201).json(transaction);
+}
+
 module.exports = {
   createTransaction,
   createBundleTransaction,
   createBundleRequestTransaction,
+  createMatchGroupTransaction,
   getTransaction,
   getMyTransactions,
   updateTransactionStatus,

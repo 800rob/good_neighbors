@@ -4,6 +4,7 @@ const {
   createTransaction,
   createBundleTransaction,
   createBundleRequestTransaction,
+  createMatchGroupTransaction,
   getTransaction,
   getMyTransactions,
   updateTransactionStatus,
@@ -34,6 +35,32 @@ const TRANSACTION_STATUSES = [
 
 // GET /api/transactions/my-transactions (must be before /:id route)
 router.get('/my-transactions', authenticate, asyncHandler(getMyTransactions));
+
+// POST /api/transactions/match-group (must be before /:id route)
+router.post(
+  '/match-group',
+  authenticate,
+  [
+    body('matchGroupId').isUUID().withMessage('Invalid match group ID'),
+    body('matchIds').isArray({ min: 1 }).withMessage('matchIds must be a non-empty array'),
+    body('matchIds.*').isUUID().withMessage('Each matchId must be a valid UUID'),
+    body('pickupTime').isISO8601().withMessage('Valid pickup time is required'),
+    body('returnTime')
+      .isISO8601()
+      .withMessage('Valid return time is required')
+      .custom((value, { req }) => {
+        if (new Date(value) <= new Date(req.body.pickupTime)) {
+          throw new Error('Return time must be after pickup time');
+        }
+        return true;
+      }),
+    body('protectionType')
+      .isIn(PROTECTION_TYPES)
+      .withMessage('Invalid protection type'),
+  ],
+  handleValidationErrors,
+  asyncHandler(createMatchGroupTransaction)
+);
 
 // POST /api/transactions/bundle-request (must be before /:id route)
 router.post(
