@@ -2,6 +2,8 @@ const express = require('express');
 const { body, param } = require('express-validator');
 const {
   createTransaction,
+  createBundleTransaction,
+  createBundleRequestTransaction,
   getTransaction,
   getMyTransactions,
   updateTransactionStatus,
@@ -32,6 +34,56 @@ const TRANSACTION_STATUSES = [
 
 // GET /api/transactions/my-transactions (must be before /:id route)
 router.get('/my-transactions', authenticate, asyncHandler(getMyTransactions));
+
+// POST /api/transactions/bundle-request (must be before /:id route)
+router.post(
+  '/bundle-request',
+  authenticate,
+  [
+    body('bundleId').isUUID().withMessage('Invalid bundle ID'),
+    body('matchIds').isArray({ min: 1 }).withMessage('matchIds must be a non-empty array'),
+    body('matchIds.*').isUUID().withMessage('Each matchId must be a valid UUID'),
+    body('pickupTime').isISO8601().withMessage('Valid pickup time is required'),
+    body('returnTime')
+      .isISO8601()
+      .withMessage('Valid return time is required')
+      .custom((value, { req }) => {
+        if (new Date(value) <= new Date(req.body.pickupTime)) {
+          throw new Error('Return time must be after pickup time');
+        }
+        return true;
+      }),
+    body('protectionType')
+      .isIn(PROTECTION_TYPES)
+      .withMessage('Invalid protection type'),
+  ],
+  handleValidationErrors,
+  asyncHandler(createBundleRequestTransaction)
+);
+
+// POST /api/transactions/bundle (must be before /:id route)
+router.post(
+  '/bundle',
+  authenticate,
+  [
+    body('bundleId').isUUID().withMessage('Invalid bundle ID'),
+    body('pickupTime').isISO8601().withMessage('Valid pickup time is required'),
+    body('returnTime')
+      .isISO8601()
+      .withMessage('Valid return time is required')
+      .custom((value, { req }) => {
+        if (new Date(value) <= new Date(req.body.pickupTime)) {
+          throw new Error('Return time must be after pickup time');
+        }
+        return true;
+      }),
+    body('protectionType')
+      .isIn(PROTECTION_TYPES)
+      .withMessage('Invalid protection type'),
+  ],
+  handleValidationErrors,
+  asyncHandler(createBundleTransaction)
+);
 
 // POST /api/transactions
 router.post(

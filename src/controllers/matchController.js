@@ -250,12 +250,34 @@ async function getIncomingMatches(req, res) {
   }) : [];
   const avgByUser = Object.fromEntries(ratingAverages.map(r => [r.ratedUserId, r._avg.overallRating]));
 
+  // Batch-fetch bundle siblings for matches whose requests have a bundleId
+  const bundleIds = [...new Set(matches.map(m => m.request?.bundleId).filter(Boolean))];
+  const bundleSiblingsByBundleId = {};
+  if (bundleIds.length > 0) {
+    const siblingRequests = await prisma.request.findMany({
+      where: { bundleId: { in: bundleIds } },
+      select: { id: true, title: true, categoryTier3: true, status: true, bundleId: true },
+    });
+    for (const sr of siblingRequests) {
+      if (!bundleSiblingsByBundleId[sr.bundleId]) {
+        bundleSiblingsByBundleId[sr.bundleId] = [];
+      }
+      bundleSiblingsByBundleId[sr.bundleId].push(sr);
+    }
+  }
+
   const enrichedMatches = matches.map(match => {
     const requesterId = match.request?.requester?.id;
     const totalRatings = match.request?.requester?._count?.ratingsReceived || 0;
     const averageRating = requesterId && avgByUser[requesterId] != null
       ? parseFloat(avgByUser[requesterId].toFixed(2))
       : null;
+
+    // Attach bundle siblings (excluding the current request itself)
+    const bundleId = match.request?.bundleId;
+    const allSiblings = bundleId ? bundleSiblingsByBundleId[bundleId] || [] : [];
+    const bundleSiblings = allSiblings.filter(s => s.id !== match.requestId);
+
     return {
       ...match,
       request: {
@@ -266,6 +288,7 @@ async function getIncomingMatches(req, res) {
           averageRating,
           totalRatings,
         },
+        bundleSiblings: bundleSiblings.length > 0 ? bundleSiblings : undefined,
       },
     };
   });
@@ -280,4 +303,132 @@ async function getIncomingMatches(req, res) {
   });
 }
 
-module.exports = { respondToMatch, getIncomingMatches };
+/**
+ * Respond to a bundle of matches at once (accept/decline per item)
+ * POST /api/matches/respond-bundle
+ */
+async function respondToBundle(req, res) {
+  const { bundleId, matchResponses } = req.body;
+
+  if (!bundleId || !Array.isArray(matchResponses) || matchResponses.length === 0) {
+    return res.status(400).json({ error: 'bundleId and matchResponses array are required' });
+  }
+
+  // Validate each response entry
+  for (const mr of matchResponses) {
+    if (!mr.matchId || !['accepted', 'declined'].includes(mr.response)) {
+      return res.status(400).json({ error: 'Each matchResponse must have matchId and response ("accepted" or "declined")' });
+    }
+  }
+
+  const matchIds = matchResponses.map(mr => mr.matchId);
+  const responseMap = Object.fromEntries(matchResponses.map(mr => [mr.matchId, mr.response]));
+
+  // Fetch all matches with their items and requests
+  const matches = await prisma.match.findMany({
+    where: { id: { in: matchIds } },
+    include: {
+      item: {
+        include: {
+          owner: {
+            select: { id: true, firstName: true, lastName: true, neighborhood: true, state: true },
+          },
+        },
+      },
+      request: {
+        include: {
+          requester: {
+            select: { id: true, firstName: true, lastName: true, neighborhood: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (matches.length !== matchIds.length) {
+    return res.status(404).json({ error: 'One or more matches not found' });
+  }
+
+  // Verify all matches belong to the same bundleId and are owned by current user
+  for (const match of matches) {
+    if (match.item.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to respond to one or more matches' });
+    }
+    if (match.request.bundleId !== bundleId) {
+      return res.status(400).json({ error: 'All matches must belong to the specified bundle' });
+    }
+    if (match.lenderResponse !== 'pending') {
+      return res.status(400).json({ error: `Match ${match.id} has already been responded to` });
+    }
+  }
+
+  // Process all responses — only update match responses, no transactions
+  // The borrower initiates the transaction later via "Borrow Entire Bundle"
+  const updatedMatches = await prisma.$transaction(async (tx) => {
+    const updated = [];
+
+    for (const match of matches) {
+      const response = responseMap[match.id];
+
+      const updatedMatch = await tx.match.update({
+        where: { id: match.id },
+        data: {
+          lenderResponse: response,
+          respondedAt: new Date(),
+        },
+        include: {
+          item: true,
+          request: {
+            include: {
+              requester: {
+                select: { id: true, firstName: true, lastName: true, neighborhood: true },
+              },
+            },
+          },
+        },
+      });
+
+      updated.push(updatedMatch);
+    }
+
+    return updated;
+  });
+
+  // Send notifications outside the transaction
+  for (const match of updatedMatches) {
+    const response = responseMap[match.id];
+    const lenderFullName = [match.item?.owner?.firstName || matches.find(m => m.id === match.id)?.item?.owner?.firstName,
+      match.item?.owner?.lastName || matches.find(m => m.id === match.id)?.item?.owner?.lastName].filter(Boolean).join(' ');
+
+    if (response === 'accepted') {
+      await notifyUser(match.request.requesterId, 'match_accepted', {
+        matchId: match.id,
+        itemId: match.itemId,
+        itemTitle: match.item?.title,
+        lenderId: match.item?.ownerId,
+        lenderName: lenderFullName,
+        requestId: match.requestId,
+      });
+    } else {
+      await notifyUser(match.request.requesterId, 'match_declined', {
+        matchId: match.id,
+        itemId: match.itemId,
+        itemTitle: match.item?.title,
+        lenderId: match.item?.ownerId,
+        lenderName: lenderFullName,
+        requestId: match.requestId,
+      });
+    }
+  }
+
+  const acceptedCount = updatedMatches.filter(m => responseMap[m.id] === 'accepted').length;
+  const declinedCount = updatedMatches.length - acceptedCount;
+
+  res.json({
+    matches: updatedMatches,
+    transactions: [],
+    message: `Bundle response processed: ${acceptedCount} accepted, ${declinedCount} declined`,
+  });
+}
+
+module.exports = { respondToMatch, getIncomingMatches, respondToBundle };

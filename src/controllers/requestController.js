@@ -27,6 +27,9 @@ async function createRequest(req, res) {
     customNeed,
     // Specs/details
     details,
+    // Bundle support
+    bundleId,
+    isBundleLeader,
   } = req.body;
 
   // Validate specs if provided
@@ -50,6 +53,24 @@ async function createRequest(req, res) {
     });
   }
 
+  // Handle bundle: create new bundle if leader, or link to existing
+  let resolvedBundleId = bundleId || null;
+  if (isBundleLeader && !resolvedBundleId) {
+    const bundle = await prisma.bundle.create({
+      data: {
+        creatorId: req.user.id,
+        type: 'curated',
+        status: 'active',
+        title: `${title} bundle`,
+      },
+    });
+    resolvedBundleId = bundle.id;
+  }
+
+  // Expire 30 days after the needed-until date (or 30 days from now)
+  const expiresAt = new Date(neededUntil ? new Date(neededUntil) : Date.now());
+  expiresAt.setDate(expiresAt.getDate() + 30);
+
   const request = await prisma.request.create({
     data: {
       requesterId: req.user.id,
@@ -58,6 +79,7 @@ async function createRequest(req, res) {
       description,
       neededFrom: new Date(neededFrom),
       neededUntil: new Date(neededUntil),
+      expiresAt,
       maxBudget: maxBudget ? parseFloat(maxBudget) : null,
       maxDistanceMiles: parseFloat(maxDistanceMiles),
       latitude: parseFloat(reqLat),
@@ -70,6 +92,7 @@ async function createRequest(req, res) {
       isOther: isOther || false,
       customNeed: customNeed || null,
       details: details || {},
+      bundleId: resolvedBundleId,
     },
     include: {
       requester: {
@@ -85,6 +108,7 @@ async function createRequest(req, res) {
     request,
     matchesFound: matches.length,
     matches: matches.slice(0, 5), // Return top 5 matches
+    ...(resolvedBundleId && { bundleId: resolvedBundleId }),
   });
 }
 
@@ -126,11 +150,20 @@ async function getRequest(req, res) {
     return res.status(404).json({ error: 'Request not found' });
   }
 
+  // If request belongs to a bundle, fetch sibling requests
+  let bundleSiblings = [];
+  if (request.bundleId) {
+    bundleSiblings = await prisma.request.findMany({
+      where: { bundleId: request.bundleId, id: { not: request.id } },
+      select: { id: true, title: true, categoryTier3: true, status: true },
+    });
+  }
+
   // Non-owners can only see basic request info (no matches, no location details)
   const isOwner = request.requesterId === req.user.id;
   if (!isOwner) {
     const { matches, latitude, longitude, maxDistanceMiles, ...safeRequest } = request;
-    return res.json(safeRequest);
+    return res.json({ ...safeRequest, bundleSiblings });
   }
 
   // Compute averageRating for each match's item owner (batch aggregation)
@@ -176,7 +209,7 @@ async function getRequest(req, res) {
     }
   }
 
-  res.json(request);
+  res.json({ ...request, bundleSiblings });
 }
 
 /**
@@ -197,6 +230,7 @@ async function getMyRequests(req, res) {
       where,
       include: {
         _count: { select: { matches: true } },
+        bundle: { select: { id: true, title: true } },
         matches: {
           where: { lenderResponse: { not: 'declined' } },
           include: {

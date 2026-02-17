@@ -7,7 +7,8 @@ const {
   searchCategories,
   validateCategories,
   getPricingSuggestions,
-  getSpecs
+  getSpecs,
+  getSuggestions
 } = require('../controllers/categoryController');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -36,5 +37,8 @@ router.get('/pricing', asyncHandler(getPricingSuggestions));
 
 // GET /api/categories/specs?type=item&tier1=Outdoor%20%26%20Recreation&tier2=Winter%20Sports&tier3=Alpine%20Skis - Get spec definitions
 router.get('/specs', asyncHandler(getSpecs));
+
+// GET /api/categories/suggestions?type=item&tier1=...&tier2=...&tier3=... - Get sibling tier3 items for bundling
+router.get('/suggestions', asyncHandler(getSuggestions));
 
 module.exports = router;

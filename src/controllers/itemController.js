@@ -34,6 +34,8 @@ async function createItem(req, res) {
     customItemName,
     // Specs/details
     details,
+    // Bundle support
+    bundleWithItemIds,
   } = req.body;
 
   // Validate specs if provided
@@ -44,6 +46,17 @@ async function createItem(req, res) {
       if (!validation.valid) {
         return res.status(400).json({ error: 'Invalid specs', details: validation.errors });
       }
+    }
+  }
+
+  // If bundling, verify all specified items belong to this user
+  if (bundleWithItemIds && bundleWithItemIds.length > 0) {
+    const existingItems = await prisma.item.findMany({
+      where: { id: { in: bundleWithItemIds }, ownerId: req.user.id },
+      select: { id: true },
+    });
+    if (existingItems.length !== bundleWithItemIds.length) {
+      return res.status(400).json({ error: 'Some items to bundle were not found or do not belong to you' });
     }
   }
 
@@ -80,6 +93,24 @@ async function createItem(req, res) {
       },
     },
   });
+
+  // If bundling, create a Bundle and link all items (new + existing)
+  if (bundleWithItemIds && bundleWithItemIds.length > 0) {
+    const bundle = await prisma.bundle.create({
+      data: {
+        creatorId: req.user.id,
+        type: 'curated',
+        status: 'active',
+        title: `${title} bundle`,
+      },
+    });
+    // Link all items to the bundle
+    await prisma.item.updateMany({
+      where: { id: { in: [item.id, ...bundleWithItemIds] } },
+      data: { bundleId: bundle.id },
+    });
+    item.bundleId = bundle.id;
+  }
 
   // Reverse-match: find open requests that match this new item (async, don't block response)
   findRequestsForItem(item.id).catch(err => {
@@ -360,6 +391,15 @@ async function getItem(req, res) {
     isFavorited = !!fav;
   }
 
+  // If item belongs to a bundle, fetch sibling items
+  let bundleSiblings = [];
+  if (item.bundleId) {
+    bundleSiblings = await prisma.item.findMany({
+      where: { bundleId: item.bundleId, id: { not: item.id } },
+      select: { id: true, title: true, categoryTier3: true, photoUrls: true, isAvailable: true },
+    });
+  }
+
   res.json({
     ...item,
     isFavorited,
@@ -370,6 +410,7 @@ async function getItem(req, res) {
       returnTime: activeTransaction.returnTime,
     } : null,
     bookedPeriods,
+    bundleSiblings,
     owner: {
       ...item.owner,
       averageRating: ownerRatings._avg.overallRating
@@ -545,6 +586,7 @@ async function getMyItems(req, res) {
   const [items, total] = await Promise.all([
     prisma.item.findMany({
       where,
+      include: { bundle: { select: { id: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take: parsedLimit,
       skip: parsedOffset,

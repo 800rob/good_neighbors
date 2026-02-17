@@ -447,6 +447,36 @@ function getSpecs(req, res) {
   });
 }
 
+/**
+ * Get sibling tier3 suggestions for bundling
+ * GET /api/categories/suggestions?type=item&tier1=Outdoor%20%26%20Recreation&tier2=Winter%20Sports&tier3=Alpine%20Skis
+ * Returns other tier3 items in the same tier2 family (excluding the current one)
+ */
+function getSuggestions(req, res) {
+  const { type, tier1, tier2, tier3 } = req.query;
+
+  if (!type || !['item', 'service'].includes(type)) {
+    return res.status(400).json({ error: 'Type must be "item" or "service"' });
+  }
+
+  if (!tier1 || !tier2 || !tier3) {
+    return res.status(400).json({ error: 'tier1, tier2, and tier3 are required' });
+  }
+
+  const key = type === 'item' ? 'items' : 'services';
+  const tier2Data = categories[key]?.[tier1]?.[tier2];
+
+  if (!tier2Data) {
+    return res.json({ suggestions: [] });
+  }
+
+  const suggestions = tier2Data
+    .filter(item => item !== tier3 && item !== 'Other')
+    .map(item => ({ tier3: item, tier2, tier1 }));
+
+  res.json({ type, tier1, tier2, tier3, suggestions });
+}
+
 module.exports = {
   getHierarchy,
   getTier1,
@@ -456,6 +486,7 @@ module.exports = {
   validateCategories,
   getPricingSuggestions,
   getSpecs,
+  getSuggestions,
   levenshteinDistance,
   fuzzySearchInternal
 };

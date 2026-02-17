@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param } = require('express-validator');
-const { respondToMatch, getIncomingMatches } = require('../controllers/matchController');
+const { respondToMatch, getIncomingMatches, respondToBundle } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -22,6 +22,22 @@ router.put(
   ],
   handleValidationErrors,
   asyncHandler(respondToMatch)
+);
+
+// POST /api/matches/respond-bundle
+router.post(
+  '/respond-bundle',
+  authenticate,
+  [
+    body('bundleId').isUUID().withMessage('Invalid bundle ID'),
+    body('matchResponses').isArray({ min: 1 }).withMessage('matchResponses must be a non-empty array'),
+    body('matchResponses.*.matchId').isUUID().withMessage('Invalid match ID in matchResponses'),
+    body('matchResponses.*.response')
+      .isIn(['accepted', 'declined'])
+      .withMessage('Each response must be "accepted" or "declined"'),
+  ],
+  handleValidationErrors,
+  asyncHandler(respondToBundle)
 );
 
 module.exports = router;

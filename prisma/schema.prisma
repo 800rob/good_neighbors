@@ -109,6 +109,25 @@ enum RatingRole {
   borrower
 }
 
+enum BundleType {
+  curated
+  cross_neighbor
+  template
+}
+
+enum BundleStatus {
+  draft
+  active
+  archived
+}
+
+enum BundleRequestStatus {
+  pending
+  recommended
+  confirmed
+  cancelled
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -149,6 +168,8 @@ model User {
   notifications           Notification[]
   favorites               Favorite[]
   auditLogs               TransactionAuditLog[]
+  bundles                 Bundle[]
+  bundleRequests          BundleRequest[]
 
   @@index([latitude, longitude], name: "idx_user_location")
   @@index([neighborhood], name: "idx_user_neighborhood")
@@ -190,11 +211,17 @@ model Item {
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
 
+  // Bundle grouping (optional — links items that belong to same bundle)
+  bundleId             String?              @map("bundle_id") @db.Uuid
+  bundle               Bundle?              @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+
   // Relations
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   matches      Match[]
   transactions Transaction[]
   favorites    Favorite[]
+  bundleItems  BundleItem[]
+  transactionItems TransactionItem[] @relation("TransactionItemItems")
 
   @@index([ownerId], name: "idx_item_owner")
   @@index([category], name: "idx_item_category")
@@ -234,6 +261,10 @@ model Request {
   expiresAt       DateTime      @map("expires_at")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Bundle grouping (optional — links requests that belong to same bundle)
+  bundleId        String?       @map("bundle_id") @db.Uuid
+  bundle          Bundle?       @relation(fields: [bundleId], references: [id], onDelete: SetNull)
 
   // Relations
   requester    User          @relation(fields: [requesterId], references: [id], onDelete: Cascade)
@@ -307,11 +338,15 @@ model Transaction {
   disputeResolutionNotes String?     @map("dispute_resolution_notes") @db.Text
   returnReminderSent Boolean         @default(false) @map("return_reminder_sent")
   overdueNotificationSent Boolean    @default(false) @map("overdue_notification_sent")
+  bundleRequestId  String?           @map("bundle_request_id") @db.Uuid
+  bundleId         String?           @map("bundle_id") @db.Uuid
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
   // Relations
   request  Request?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  bundleRequest BundleRequest? @relation(fields: [bundleRequestId], references: [id], onDelete: SetNull)
+  bundle   Bundle?   @relation(fields: [bundleId], references: [id], onDelete: SetNull)
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
   borrower User      @relation("BorrowerTransactions", fields: [borrowerId], references: [id], onDelete: Restrict)
   lender   User      @relation("LenderTransactions", fields: [lenderId], references: [id], onDelete: Restrict)
@@ -319,6 +354,7 @@ model Transaction {
   messages  Message[]
   ratings   Rating[]
   auditLogs TransactionAuditLog[]
+  transactionItems TransactionItem[]
 
   @@index([borrowerId], name: "idx_transaction_borrower")
   @@index([lenderId], name: "idx_transaction_lender")
@@ -480,4 +516,110 @@ model TransactionAuditLog {
   @@index([userId], name: "idx_audit_log_user")
   @@index([createdAt], name: "idx_audit_log_created")
   @@map("transaction_audit_logs")
+}
+
+/// Bundles - Groupings of items/services (curated by user or system templates)
+model Bundle {
+  id                  String       @id @default(uuid()) @db.Uuid
+  creatorId           String?      @map("creator_id") @db.Uuid
+  type                BundleType   @default(curated)
+  status              BundleStatus @default(draft)
+  title               String
+  description         String?      @db.Text
+  photoUrl            String?      @map("photo_url")
+  templateSlug        String?      @unique @map("template_slug")
+  suggestedCategories Json?        @default("[]") @map("suggested_categories")
+  keywords            String[]     @default([])
+  estimatedTotal      Decimal?     @map("estimated_total") @db.Decimal(10, 2)
+  pricingBasis        String?      @map("pricing_basis") // e.g. "daily", "weekly"
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  creator        User?          @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+  items          Item[]
+  requests       Request[]
+  bundleItems    BundleItem[]
+  bundleRequests BundleRequest[]
+  transactions   Transaction[]
+
+  @@index([creatorId], name: "idx_bundle_creator")
+  @@index([type, status], name: "idx_bundle_type_status")
+  @@index([status], name: "idx_bundle_status")
+  @@map("bundles")
+}
+
+/// BundleItem - Links real items to a bundle OR defines template slots
+model BundleItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  bundleId     String   @map("bundle_id") @db.Uuid
+  itemId       String?  @map("item_id") @db.Uuid
+  sortOrder    Int      @default(0) @map("sort_order")
+  isRequired   Boolean  @default(true) @map("is_required")
+  quantity     Int      @default(1)
+  slotLabel    String?  @map("slot_label")
+  slotTier1    String?  @map("slot_tier1")
+  slotTier2    String?  @map("slot_tier2")
+  slotTier3    String?  @map("slot_tier3")
+  slotKeywords String[] @default([]) @map("slot_keywords")
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  bundle Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  item   Item?  @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([bundleId], name: "idx_bundle_item_bundle")
+  @@index([itemId], name: "idx_bundle_item_item")
+  @@map("bundle_items")
+}
+
+/// BundleRequest - Smart request entity (future: intent parsing + bundle assembly)
+model BundleRequest {
+  id               String              @id @default(uuid()) @db.Uuid
+  requesterId      String              @map("requester_id") @db.Uuid
+  bundleId         String?             @map("bundle_id") @db.Uuid
+  description      String              @db.Text
+  parsedIntent     Json?               @default("{}") @map("parsed_intent")
+  neededFrom       DateTime?           @map("needed_from")
+  neededUntil      DateTime?           @map("needed_until")
+  latitude         Decimal?            @db.Decimal(10, 8)
+  longitude        Decimal?            @db.Decimal(11, 8)
+  maxBudget        Decimal?            @map("max_budget") @db.Decimal(10, 2)
+  status           BundleRequestStatus @default(pending)
+  recommendedItems Json?               @default("[]") @map("recommended_items")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  requester    User          @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  bundle       Bundle?       @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([requesterId], name: "idx_bundle_request_requester")
+  @@index([bundleId], name: "idx_bundle_request_bundle")
+  @@index([status], name: "idx_bundle_request_status")
+  @@map("bundle_requests")
+}
+
+/// TransactionItem - Per-item fee breakdown for bundle transactions
+model TransactionItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  itemId        String   @map("item_id") @db.Uuid
+  rentalFee     Decimal  @map("rental_fee") @db.Decimal(10, 2)
+  platformFee   Decimal  @map("platform_fee") @db.Decimal(10, 2)
+  depositAmount Decimal? @map("deposit_amount") @db.Decimal(10, 2)
+  insuranceFee  Decimal? @map("insurance_fee") @db.Decimal(10, 2)
+  taxAmount     Decimal? @map("tax_amount") @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  item        Item        @relation("TransactionItemItems", fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, itemId], name: "uq_transaction_item")
+  @@index([transactionId])
+  @@index([itemId])
+  @@map("transaction_items")
 }

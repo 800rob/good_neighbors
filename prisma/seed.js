@@ -121,7 +121,7 @@ async function main() {
         lateFeeAmount: 10,
         protectionPreference: 'let_me_decide',
         depositPercentage: 50,
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1683029937055-3342dd0be6d3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxlbGVjdHJpYyUyMGRyaWxsJTIwdG9vbHxlbnwwfDJ8fHwxNzcxMjYwODQzfDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -138,7 +138,7 @@ async function main() {
         lateFeeAmount: 15,
         protectionPreference: 'deposit_required',
         depositPercentage: 50,
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1657095544219-6328434702a8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxjaXJjdWxhciUyMHNhdyUyMGNvcmRsZXNzJTIwY3V0dGluZyUyMHdvb2R8ZW58MHwyfHx8MTc3MTE5ODY5M3ww&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -207,7 +207,7 @@ async function main() {
         lateFeeAmount: 30,
         protectionPreference: 'deposit_required',
         depositPercentage: 40,
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1665672629999-0994c3f052a9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxwb3J0YWJsZSUyMHNwZWFrZXIlMjBtdXNpY3xlbnwwfDJ8fHwxNzcxMjYwNzgzfDA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
 
@@ -225,7 +225,7 @@ async function main() {
         priceAmount: 35,
         lateFeeAmount: 25,
         protectionPreference: 'insurance_required',
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1657095544219-6328434702a8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHxtaXRlciUyMHNhdyUyMGN1dHRpbmclMjB3b29kfGVufDB8Mnx8fDE3NzEyNjA3ODJ8MA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
@@ -292,7 +292,7 @@ async function main() {
         pricingType: 'hourly',
         priceAmount: 10,
         protectionPreference: 'waiver_ok',
-        photoUrls: [],
+        photoUrls: ['https://images.unsplash.com/photo-1742989667140-c69adadf556b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NzU2ODR8MHwxfHNlYXJjaHwxfHx3b3Jrc2hvcCUyMHRvb2xzJTIwd29ya2JlbmNofGVufDB8Mnx8fDE3NzEyNjA3ODV8MA&ixlib=rb-4.1.0&q=80&w=1080'],
       },
     }),
     prisma.item.create({
