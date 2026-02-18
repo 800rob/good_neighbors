@@ -439,4 +439,89 @@ async function respondToBundle(req, res) {
   });
 }
 
-module.exports = { respondToMatch, getIncomingMatches, respondToBundle };
+/**
+ * Get matches for the current user's requests (borrower/outgoing view)
+ * GET /api/matches/outgoing
+ */
+async function getOutgoingMatches(req, res) {
+  const parsedLimit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+  const parsedOffset = Math.max(parseInt(req.query.offset) || 0, 0);
+
+  const where = {
+    request: {
+      requesterId: req.user.id,
+      status: { in: ['open', 'matched', 'accepted'] },
+    },
+    lenderResponse: { not: 'declined' },
+  };
+
+  const [matches, total] = await Promise.all([
+    prisma.match.findMany({
+      where,
+      include: {
+        item: {
+          include: {
+            owner: {
+              select: {
+                id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true,
+                _count: { select: { ratingsReceived: true } },
+              },
+            },
+          },
+        },
+        request: {
+          select: {
+            id: true, title: true, status: true, neededFrom: true, neededUntil: true,
+            listingType: true, categoryTier1: true, categoryTier2: true, categoryTier3: true,
+            bundleId: true,
+          },
+        },
+      },
+      orderBy: { matchScore: 'desc' },
+      take: parsedLimit,
+      skip: parsedOffset,
+    }),
+    prisma.match.count({ where }),
+  ]);
+
+  // Batch compute average ratings for all unique owner IDs (avoids N+1)
+  const ownerIds = [...new Set(matches.map(m => m.item?.owner?.id).filter(Boolean))];
+  const ratingAverages = ownerIds.length > 0 ? await prisma.rating.groupBy({
+    by: ['ratedUserId'],
+    where: { ratedUserId: { in: ownerIds } },
+    _avg: { overallRating: true },
+  }) : [];
+  const avgByUser = Object.fromEntries(ratingAverages.map(r => [r.ratedUserId, r._avg.overallRating]));
+
+  const enrichedMatches = matches.map(match => {
+    const ownerId = match.item?.owner?.id;
+    const totalRatings = match.item?.owner?._count?.ratingsReceived || 0;
+    const averageRating = ownerId && avgByUser[ownerId] != null
+      ? parseFloat(avgByUser[ownerId].toFixed(2))
+      : null;
+
+    return {
+      ...match,
+      item: {
+        ...match.item,
+        owner: {
+          ...match.item.owner,
+          _count: undefined,
+          averageRating,
+          totalRatings,
+        },
+      },
+    };
+  });
+
+  res.json({
+    matches: enrichedMatches,
+    pagination: {
+      total,
+      limit: parsedLimit,
+      offset: parsedOffset,
+    },
+  });
+}
+
+module.exports = { respondToMatch, getIncomingMatches, getOutgoingMatches, respondToBundle };

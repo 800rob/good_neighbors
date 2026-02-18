@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, param } = require('express-validator');
-const { respondToMatch, getIncomingMatches, respondToBundle } = require('../controllers/matchController');
+const { respondToMatch, getIncomingMatches, getOutgoingMatches, respondToBundle } = require('../controllers/matchController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -9,6 +9,9 @@ const router = express.Router();
 
 // GET /api/matches/incoming
 router.get('/incoming', authenticate, asyncHandler(getIncomingMatches));
+
+// GET /api/matches/outgoing
+router.get('/outgoing', authenticate, asyncHandler(getOutgoingMatches));
 
 // PUT /api/matches/:id/respond
 router.put(
