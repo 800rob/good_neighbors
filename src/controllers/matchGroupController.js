@@ -68,9 +68,12 @@ async function getBorrowerMatchGroups(req, res) {
     return { ...group, matches };
   }));
 
+  // Filter out groups with no active matches
+  const filteredGroups = enrichedGroups.filter(g => g.matches.length > 0);
+
   res.json({
-    matchGroups: enrichedGroups,
-    pagination: { total, limit: parsedLimit, offset: parsedOffset },
+    matchGroups: filteredGroups,
+    pagination: { total: filteredGroups.length, limit: parsedLimit, offset: parsedOffset },
   });
 }
 
@@ -141,9 +144,12 @@ async function getLenderMatchGroups(req, res) {
     return { ...group, matches };
   }));
 
+  // Filter out groups with no active matches
+  const filteredGroups = enrichedGroups.filter(g => g.matches.length > 0);
+
   res.json({
-    matchGroups: enrichedGroups,
-    pagination: { total, limit: parsedLimit, offset: parsedOffset },
+    matchGroups: filteredGroups,
+    pagination: { total: filteredGroups.length, limit: parsedLimit, offset: parsedOffset },
   });
 }
 
@@ -266,10 +272,21 @@ async function respondToMatchGroup(req, res) {
     data: { status: newStatus },
   });
 
+  // Audit log: match group responses (no transaction exists yet, log structured info)
+  console.log(`[AuditLog] Match group ${id} response by user ${req.user.id}:`, {
+    matchGroupId: id,
+    borrowerId: matchGroup.borrowerId,
+    lenderId: matchGroup.lenderId,
+    responses: matchResponses.map(mr => ({ matchId: mr.matchId, response: mr.response })),
+    groupStatus: newStatus,
+  });
+
   // Refresh match groups (in case declining drops a group below 2)
   refreshMatchGroups(matchGroup.borrowerId).catch(err =>
     console.error('[MatchGrouping] Failed to refresh after respondToMatchGroup:', err.message)
   );
+
+  console.log(`[MatchGroup] Lender ${req.user.id} responded to group ${id}: ${acceptedCount} accepted, ${declinedCount} declined → ${newStatus}`);
 
   res.json({
     matches: updatedMatches,

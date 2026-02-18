@@ -322,6 +322,19 @@ async function autoCompleteStaleTransactions() {
         data: { status: 'completed' },
       });
 
+      // Audit log: auto-completed stale transaction
+      // Use lenderId as userId since this is a system action (no user initiated it)
+      await prisma.transactionAuditLog.create({
+        data: {
+          transactionId: transaction.id,
+          userId: transaction.lenderId,
+          action: 'status_change',
+          fromStatus: transaction.status,
+          toStatus: 'completed',
+          metadata: { triggeredBy: 'system', reason: 'Auto-completed after stale timeout' },
+        },
+      }).catch(err => console.error('[AuditLog] Failed to log auto-complete:', err.message));
+
       const borrowerName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
       const lenderName = [transaction.lender.firstName, transaction.lender.lastName].filter(Boolean).join(' ');
 

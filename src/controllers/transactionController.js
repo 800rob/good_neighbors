@@ -56,16 +56,6 @@ async function createTransaction(req, res) {
       return res.status(403).json({ error: 'Not authorized to create transaction for this match' });
     }
 
-    // If the lender hasn't responded yet, mark the match as accepted
-    // (borrower is confirming intent; the transaction starts as "requested"
-    //  so the lender still needs to accept the transaction itself)
-    if (match.lenderResponse === 'pending') {
-      await prisma.match.update({
-        where: { id: matchId },
-        data: { lenderResponse: 'accepted', respondedAt: new Date() },
-      });
-    }
-
     item = match.item;
   } else if (itemId) {
     // Direct transaction without a match (browse-based)
@@ -104,8 +94,18 @@ async function createTransaction(req, res) {
 
   // Wrap date conflict check + fee calc + create in a transaction for atomicity
   const transaction = await prisma.$transaction(async (tx) => {
+    // If the lender hasn't responded yet, mark the match as accepted
+    // (borrower is confirming intent; the transaction starts as "requested"
+    //  so the lender still needs to accept the transaction itself)
+    if (match?.lenderResponse === 'pending') {
+      await tx.match.update({
+        where: { id: matchId },
+        data: { lenderResponse: 'accepted', respondedAt: new Date() },
+      });
+    }
+
     // Check for date conflicts with existing bookings
-    const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+    const conflict = await hasDateConflict(item.id, pickupTime, returnTime, null, tx);
     if (conflict.hasConflict) {
       const err = new Error('This item is already booked during the requested dates');
       err.statusCode = 409;
@@ -345,6 +345,18 @@ async function updateTransactionStatus(req, res) {
     return res.status(403).json({ error: 'Only the lender can accept the transaction' });
   }
 
+  if (status === 'pickup_confirmed' && transaction.borrowerId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the borrower can confirm pickup' });
+  }
+
+  if (status === 'return_initiated' && transaction.borrowerId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the borrower can initiate return' });
+  }
+
+  if (status === 'return_confirmed' && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the lender can confirm return' });
+  }
+
   if (status === 'disputed' && !disputeReason) {
     return res.status(400).json({ error: 'Dispute reason is required' });
   }
@@ -356,7 +368,7 @@ async function updateTransactionStatus(req, res) {
     updateData.actualPickupTime = new Date();
   }
 
-  if (status === 'return_confirmed' || status === 'completed') {
+  if (status === 'return_confirmed') {
     updateData.actualReturnTime = new Date();
   }
 
@@ -365,7 +377,7 @@ async function updateTransactionStatus(req, res) {
   }
 
   // Calculate late fee if returning late
-  if (status === 'return_confirmed' || status === 'completed') {
+  if (status === 'return_confirmed') {
     const actualReturn = updateData.actualReturnTime || new Date();
     if (actualReturn > transaction.returnTime && transaction.item.lateFeeAmount) {
       const daysLate = Math.ceil((actualReturn - transaction.returnTime) / (1000 * 60 * 60 * 24));
@@ -548,6 +560,10 @@ async function disputeTransaction(req, res) {
     return res.status(400).json({ error: 'Dispute reason is required' });
   }
 
+  if (disputeReason.length > 2000) {
+    return res.status(400).json({ error: 'Dispute reason must be under 2000 characters' });
+  }
+
   if (disputeCategory && !DISPUTE_CATEGORIES.includes(disputeCategory)) {
     return res.status(400).json({ error: 'Invalid dispute category' });
   }
@@ -638,6 +654,10 @@ async function respondToDispute(req, res) {
 
   if (!disputeResponse || !disputeResponse.trim()) {
     return res.status(400).json({ error: 'Response text is required' });
+  }
+
+  if (disputeResponse.length > 2000) {
+    return res.status(400).json({ error: 'Dispute response must be under 2000 characters' });
   }
 
   const updatedTransaction = await prisma.transaction.update({
@@ -799,7 +819,7 @@ async function createBundleTransaction(req, res) {
   const transaction = await prisma.$transaction(async (tx) => {
     // Date conflict check for each item
     for (const item of items) {
-      const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+      const conflict = await hasDateConflict(item.id, pickupTime, returnTime, null, tx);
       if (conflict.hasConflict) {
         const err = new Error(`"${item.title}" is already booked during the requested dates`);
         err.statusCode = 409;
@@ -1021,7 +1041,7 @@ async function createBundleRequestTransaction(req, res) {
 
     // Date conflict check for each item
     for (const item of items) {
-      const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+      const conflict = await hasDateConflict(item.id, pickupTime, returnTime, null, tx);
       if (conflict.hasConflict) {
         const err = new Error(`"${item.title}" is already booked during the requested dates`);
         err.statusCode = 409;
@@ -1228,18 +1248,29 @@ async function createMatchGroupTransaction(req, res) {
   const ownerId = matchGroup.lenderId;
 
   const transaction = await prisma.$transaction(async (tx) => {
-    // Auto-accept any pending matches
-    const pendingMatchIds = matches.filter(m => m.lenderResponse === 'pending').map(m => m.id);
+    // Re-validate matches inside transaction to prevent TOCTOU race
+    const freshMatches = await tx.match.findMany({
+      where: { id: { in: matchIds }, lenderResponse: { not: 'declined' } },
+      select: { id: true, lenderResponse: true },
+    });
+    if (freshMatches.length !== matchIds.length) {
+      const err = new Error('One or more matches were declined since the request was initiated');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // Auto-accept any pending matches (with lenderResponse guard)
+    const pendingMatchIds = freshMatches.filter(m => m.lenderResponse === 'pending').map(m => m.id);
     if (pendingMatchIds.length > 0) {
       await tx.match.updateMany({
-        where: { id: { in: pendingMatchIds } },
+        where: { id: { in: pendingMatchIds }, lenderResponse: 'pending' },
         data: { lenderResponse: 'accepted', respondedAt: new Date() },
       });
     }
 
     // Date conflict check for each item
     for (const item of items) {
-      const conflict = await hasDateConflict(item.id, pickupTime, returnTime);
+      const conflict = await hasDateConflict(item.id, pickupTime, returnTime, null, tx);
       if (conflict.hasConflict) {
         const err = new Error(`"${item.title}" is already booked during the requested dates`);
         err.statusCode = 409;

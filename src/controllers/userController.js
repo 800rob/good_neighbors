@@ -100,8 +100,11 @@ async function updateCurrentUser(req, res) {
     neighborhood
   } = req.body;
 
+  // Normalize email to lowercase for case-insensitive comparison
+  const normalizedEmail = email?.toLowerCase();
+
   // If email is being changed, require password confirmation
-  if (email && email !== req.user.email) {
+  if (normalizedEmail && normalizedEmail !== req.user.email.toLowerCase()) {
     if (!currentPassword) {
       return res.status(400).json({ error: 'Current password is required to change email' });
     }
@@ -111,9 +114,9 @@ async function updateCurrentUser(req, res) {
       return res.status(403).json({ error: 'Incorrect password' });
     }
 
-    // Check if email is already taken
+    // Check if email is already taken (case-insensitive)
     const existingEmail = await prisma.user.findFirst({
-      where: { email, id: { not: req.user.id } },
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' }, id: { not: req.user.id } },
     });
     if (existingEmail) {
       return res.status(409).json({ error: 'Email already in use' });
@@ -166,8 +169,8 @@ async function updateCurrentUser(req, res) {
   };
 
   // Only include email if it's actually changing (and password was verified above)
-  if (email && email !== req.user.email) {
-    updateData.email = email;
+  if (normalizedEmail && normalizedEmail !== req.user.email.toLowerCase()) {
+    updateData.email = normalizedEmail;
   }
 
   const user = await prisma.user.update({
