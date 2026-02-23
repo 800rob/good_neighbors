@@ -4,6 +4,7 @@ const { calculateFees } = require('../utils/feeCalculation');
 const { getTaxRate } = require('../utils/taxRates');
 const { hasDateConflict, isAvailableForDates } = require('../utils/dateConflict');
 const { refreshMatchGroups } = require('../utils/matchGrouping');
+const logger = require('../utils/logger');
 
 // Valid state transitions
 const VALID_TRANSITIONS = {
@@ -185,7 +186,7 @@ async function createTransaction(req, res) {
       toStatus: 'requested',
       action: 'created',
     },
-  }).catch(err => console.error('[AuditLog] Failed to log transaction creation:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log transaction creation'));
 
   // Notifications sent outside the transaction (idempotent)
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
@@ -468,7 +469,7 @@ async function updateTransactionStatus(req, res) {
       action: status === 'disputed' ? 'disputed' : status === 'cancelled' ? 'cancelled' : 'status_change',
       metadata: Object.keys(auditMetadata).length > 0 ? auditMetadata : undefined,
     },
-  }).catch(err => console.error('[AuditLog] Failed to log status change:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log status change'));
 
   // Send notifications based on status change
   const borrowerName = [updatedTransaction.borrower.firstName, updatedTransaction.borrower.lastName].filter(Boolean).join(' ');
@@ -601,7 +602,7 @@ async function disputeTransaction(req, res) {
       action: 'disputed',
       metadata: { disputeReason, disputeCategory: disputeCategory || 'other' },
     },
-  }).catch(err => console.error('[AuditLog] Failed to log dispute:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log dispute'));
 
   // Notify counter-party
   const counterPartyId = req.user.id === transaction.borrowerId
@@ -753,7 +754,7 @@ async function resolveDispute(req, res) {
       action: 'dispute_resolved',
       metadata: { disputeResolution, disputeResolutionNotes: disputeResolutionNotes?.trim() || null },
     },
-  }).catch(err => console.error('[AuditLog] Failed to log dispute resolution:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log dispute resolution'));
 
   // Notify both parties
   const notificationContext = {
@@ -943,7 +944,7 @@ async function createBundleTransaction(req, res) {
       action: 'created',
       metadata: { bundleId: bundle.id, itemCount: items.length },
     },
-  }).catch(err => console.error('[AuditLog] Failed to log bundle transaction creation:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log bundle transaction creation'));
 
   // Notify lender
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
@@ -1172,7 +1173,7 @@ async function createBundleRequestTransaction(req, res) {
       action: 'created',
       metadata: { bundleId: bundle.id, itemCount: items.length, type: 'bundle_request' },
     },
-  }).catch(err => console.error('[AuditLog] Failed to log bundle request transaction creation:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log bundle request transaction creation'));
 
   // Notify lender
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
@@ -1411,7 +1412,7 @@ async function createMatchGroupTransaction(req, res) {
       action: 'created',
       metadata: { matchGroupId, itemCount: uniqueItems.length, type: 'match_group' },
     },
-  }).catch(err => console.error('[AuditLog] Failed to log match group transaction creation:', err.message));
+  }).catch(err => logger.error({ err }, 'Failed to log match group transaction creation'));
 
   // Notify lender
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
@@ -1557,7 +1558,7 @@ async function updateProtectionType(req, res) {
     newProtection: protectionType,
   });
 
-  console.log(`[Transaction] Lender ${req.user.id} changed protection on ${id}: ${transaction.protectionType} → ${protectionType}`);
+  logger.info({ lenderId: req.user.id, transactionId: id, oldProtection: transaction.protectionType, newProtection: protectionType }, 'Lender changed protection type on transaction');
 
   // Re-fetch full transaction
   const updated = await prisma.transaction.findUnique({

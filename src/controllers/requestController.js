@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const logger = require('../utils/logger');
 const { findMatchesForRequest } = require('../utils/matching');
 const { getSpecsForItem, validateBorrowerSpecs } = require('../utils/specUtils');
 const { isAvailableForDates, getItemIdsWithConflicts } = require('../utils/dateConflict');
@@ -402,7 +403,7 @@ async function cancelRequest(req, res) {
 
     // Refresh match groups after cancellation (group may drop below 2)
     refreshMatchGroups(req.user.id).catch(err =>
-      console.error('[MatchGrouping] Failed to refresh after request cancel:', err.message)
+      logger.error({ err }, 'Failed to refresh match groups after request cancel')
     );
 
     res.json(updatedRequest);
@@ -771,7 +772,7 @@ async function updateRequest(req, res) {
       await findMatchesForRequest(id);
     } catch (err) {
       // Non-fatal — the update succeeded, just log matching error
-      console.error('Re-matching after edit failed:', err.message);
+      logger.error({ err }, 'Re-matching after request edit failed');
     }
   }
 

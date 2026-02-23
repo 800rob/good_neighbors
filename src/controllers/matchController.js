@@ -4,6 +4,7 @@ const { calculateFees } = require('../utils/feeCalculation');
 const { getTaxRate } = require('../utils/taxRates');
 const { hasDateConflict } = require('../utils/dateConflict');
 const { refreshMatchGroups } = require('../utils/matchGrouping');
+const logger = require('../utils/logger');
 
 /**
  * Respond to a match (lender accepts or declines)
@@ -187,7 +188,7 @@ async function respondToMatch(req, res) {
   // Refresh match groups when a match is declined (group may drop below 2)
   if (response === 'declined') {
     refreshMatchGroups(updatedMatch.request.requesterId).catch(err =>
-      console.error('[MatchGrouping] Failed to refresh after match decline:', err.message)
+      logger.error({ err }, '[MatchGrouping] Failed to refresh after match decline')
     );
   }
 
@@ -429,7 +430,7 @@ async function respondToBundle(req, res) {
 
   // Refresh match groups after bundle response
   refreshMatchGroups(requesterId).catch(err =>
-    console.error('[MatchGrouping] Failed to refresh after respondToBundle:', err.message)
+    logger.error({ err }, '[MatchGrouping] Failed to refresh after respondToBundle')
   );
 
   res.json({

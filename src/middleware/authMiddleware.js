@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const jwtConfig = require('../config/jwt');
 const prisma = require('../config/database');
 const { COOKIE_NAME } = require('../config/cookie');
+const logger = require('../utils/logger');
 
 /**
  * Extract JWT token from cookie or Authorization header.
@@ -78,7 +79,7 @@ async function optionalAuth(req, res, next) {
     next();
   } catch (error) {
     // Token present but invalid — log for debugging, continue without user
-    console.warn(`[optionalAuth] Invalid token ignored: ${error.name} — ${error.message}`);
+    logger.warn({ err: error }, 'optionalAuth: invalid token ignored');
     next();
   }
 }

@@ -2,11 +2,13 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { errorHandler } = require('./middleware/errorHandler');
 const { startScheduler } = require('./services/schedulerService');
+const logger = require('./utils/logger');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -29,6 +31,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,
@@ -82,8 +87,8 @@ app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Good Neighbors API running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info({ port: PORT }, 'Good Neighbors API running');
+  logger.info({ env: process.env.NODE_ENV || 'development' }, 'Environment loaded');
 
   // Start the scheduler for automatic status transitions and reminders
   startScheduler();
