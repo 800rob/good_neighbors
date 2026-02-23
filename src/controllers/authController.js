@@ -25,7 +25,8 @@ async function register(req, res) {
     zipCode,
     latitude,
     longitude,
-    neighborhood
+    neighborhood,
+    tosAccepted,
   } = req.body;
 
   // Validate required name fields
@@ -76,6 +77,8 @@ async function register(req, res) {
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       neighborhood,
+      tosAcceptedAt: tosAccepted ? new Date() : null,
+      tosVersion: tosAccepted ? '1.0' : null,
     },
   });
 
@@ -200,4 +203,26 @@ async function changePassword(req, res) {
   res.json({ message: 'Password changed successfully' });
 }
 
-module.exports = { register, login, logout, changePassword };
+/**
+ * Accept Terms of Service
+ * POST /api/auth/accept-tos
+ */
+async function acceptTos(req, res) {
+  const { tosVersion } = req.body;
+
+  if (!tosVersion) {
+    return res.status(400).json({ error: 'tosVersion is required' });
+  }
+
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: {
+      tosAcceptedAt: new Date(),
+      tosVersion,
+    },
+  });
+
+  res.json({ message: 'Terms of Service accepted', tosVersion });
+}
+
+module.exports = { register, login, logout, changePassword, acceptTos };

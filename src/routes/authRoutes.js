@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login, logout, changePassword } = require('../controllers/authController');
+const { register, login, logout, changePassword, acceptTos } = require('../controllers/authController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -68,6 +68,17 @@ router.put(
   ],
   handleValidationErrors,
   asyncHandler(changePassword)
+);
+
+// POST /api/auth/accept-tos
+router.post(
+  '/accept-tos',
+  authenticate,
+  [
+    body('tosVersion').trim().notEmpty().withMessage('tosVersion is required'),
+  ],
+  handleValidationErrors,
+  asyncHandler(acceptTos)
 );
 
 module.exports = router;

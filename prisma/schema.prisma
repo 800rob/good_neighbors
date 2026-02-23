@@ -160,6 +160,8 @@ model User {
   longitude       Decimal? @db.Decimal(11, 8)
   neighborhood    String?
   isVerified      Boolean  @default(false) @map("is_verified")
+  tosAcceptedAt   DateTime? @map("tos_accepted_at")
+  tosVersion      String?  @map("tos_version")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
