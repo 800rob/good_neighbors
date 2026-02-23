@@ -293,9 +293,9 @@ async function getUserProfile(req, res) {
  */
 async function getUserRatings(req, res) {
   const { id } = req.params;
-  const { role, limit = 20, offset = 0 } = req.query;
+  const { role, given, limit = 20, offset = 0 } = req.query;
 
-  const where = { ratedUserId: id };
+  const where = given === 'true' ? { raterId: id } : { ratedUserId: id };
   if (role) {
     where.role = role;
   }
@@ -305,6 +305,9 @@ async function getUserRatings(req, res) {
       where,
       include: {
         rater: {
+          select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
+        },
+        ratedUser: {
           select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
         },
         transaction: {

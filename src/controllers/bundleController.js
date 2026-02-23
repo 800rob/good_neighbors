@@ -272,6 +272,14 @@ async function deleteBundle(req, res) {
     return res.json({ message: 'Bundle archived' });
   }
 
+  // Check for active transactions before deleting
+  const activeTransactionCount = await prisma.transaction.count({
+    where: { bundleId: id, status: { notIn: ['cancelled', 'completed'] } },
+  });
+  if (activeTransactionCount > 0) {
+    return res.status(400).json({ error: 'Cannot delete bundle with active transactions' });
+  }
+
   // Draft bundles can be hard deleted
   await prisma.bundle.delete({ where: { id } });
   res.json({ message: 'Bundle deleted' });
@@ -292,6 +300,17 @@ async function addBundleItem(req, res) {
   }
   if (bundle.creatorId !== req.user.id) {
     return res.status(403).json({ error: 'Not authorized to edit this bundle' });
+  }
+
+  // Validate that the item belongs to the bundle creator
+  if (itemId) {
+    const item = await prisma.item.findUnique({ where: { id: itemId }, select: { ownerId: true } });
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    if (item.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Can only add your own items to a bundle' });
+    }
   }
 
   // Get max sort order if not provided
@@ -350,6 +369,14 @@ async function updateBundleItem(req, res) {
     return res.status(403).json({ error: 'Not authorized to edit this bundle' });
   }
 
+  // Verify the bundle item belongs to this bundle
+  const existing = await prisma.bundleItem.findFirst({
+    where: { id: bundleItemId, bundleId: id },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: 'Bundle item not found in this bundle' });
+  }
+
   const bundleItem = await prisma.bundleItem.update({
     where: { id: bundleItemId },
     data: {
@@ -387,6 +414,14 @@ async function removeBundleItem(req, res) {
     return res.status(403).json({ error: 'Not authorized to edit this bundle' });
   }
 
+  // Verify the bundle item belongs to this bundle
+  const existingItem = await prisma.bundleItem.findFirst({
+    where: { id: bundleItemId, bundleId: id },
+  });
+  if (!existingItem) {
+    return res.status(404).json({ error: 'Bundle item not found in this bundle' });
+  }
+
   await prisma.bundleItem.delete({ where: { id: bundleItemId } });
   await recalculateEstimatedTotal(id);
 
@@ -402,7 +437,6 @@ async function publishBundle(req, res) {
 
   const bundle = await prisma.bundle.findUnique({
     where: { id },
-    include: { _count: { select: { bundleItems: true } } },
   });
 
   if (!bundle) {
@@ -411,8 +445,13 @@ async function publishBundle(req, res) {
   if (bundle.creatorId !== req.user.id) {
     return res.status(403).json({ error: 'Not authorized to publish this bundle' });
   }
-  if (bundle._count.bundleItems === 0) {
-    return res.status(400).json({ error: 'Cannot publish a bundle with no items' });
+
+  // Count only bundle items with actual items assigned (non-null itemId)
+  const filledItemCount = await prisma.bundleItem.count({
+    where: { bundleId: id, itemId: { not: null } },
+  });
+  if (filledItemCount === 0) {
+    return res.status(400).json({ error: 'Cannot publish a bundle with no items assigned' });
   }
 
   await recalculateEstimatedTotal(id);
@@ -480,7 +519,11 @@ async function recalculateEstimatedTotal(bundleId) {
   for (const bi of items) {
     if (bi.item?.priceAmount) {
       total += parseFloat(bi.item.priceAmount) * bi.quantity;
-      if (!basis) basis = bi.item.pricingType;
+      if (!basis) {
+        basis = bi.item.pricingType;
+      } else if (basis !== 'mixed' && bi.item.pricingType && bi.item.pricingType !== basis) {
+        basis = 'mixed';
+      }
     }
   }
 
@@ -514,18 +557,18 @@ async function getBundleMatches(req, res) {
     return res.status(404).json({ error: 'Bundle not found' });
   }
 
+  // Verify ownership: bundle creator or requester of any bundled request
+  const requesterIds = [...new Set(bundle.requests.map(r => r.requesterId))];
+  if (bundle.creatorId !== req.user.id && !requesterIds.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Not authorized to view bundle matches' });
+  }
+
   const requestIds = bundle.requests.map(r => r.id);
   if (requestIds.length === 0) {
     return res.json({
       bundle: { id: bundle.id, title: bundle.title, requestCount: 0 },
       bundleMatches: [],
     });
-  }
-
-  // Verify requester owns these requests
-  const requesterIds = [...new Set(bundle.requests.map(r => r.requesterId))];
-  if (!requesterIds.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Not authorized to view bundle matches' });
   }
 
   // Fetch all non-declined matches for bundle requests
@@ -578,6 +621,7 @@ async function getBundleMatches(req, res) {
         itemPhotoUrl: m.item.photoUrls?.[0] || null,
         itemPricingType: m.item.pricingType,
         itemPriceAmount: m.item.priceAmount ? parseFloat(m.item.priceAmount) : null,
+        itemProtectionPreference: m.item.protectionPreference || null,
         matchScore: parseFloat(m.matchScore),
         lenderResponse: m.lenderResponse,
       };
@@ -620,6 +664,40 @@ async function getBundleMatches(req, res) {
   });
 }
 
+/**
+ * Get requests associated with a bundle
+ * GET /api/bundles/:id/requests
+ */
+async function getBundleRequests(req, res) {
+  const { id } = req.params;
+
+  const bundle = await prisma.bundle.findUnique({
+    where: { id },
+    select: { creatorId: true },
+  });
+
+  if (!bundle) {
+    return res.status(404).json({ error: 'Bundle not found' });
+  }
+
+  if (bundle.creatorId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  const requests = await prisma.request.findMany({
+    where: { bundleId: id },
+    include: {
+      requester: {
+        select: { id: true, firstName: true, lastName: true, profilePhotoUrl: true },
+      },
+      _count: { select: { matches: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  res.json({ requests });
+}
+
 module.exports = {
   createBundle,
   getBundles,
@@ -634,4 +712,5 @@ module.exports = {
   removeBundleItem,
   publishBundle,
   getBundleMatches,
+  getBundleRequests,
 };

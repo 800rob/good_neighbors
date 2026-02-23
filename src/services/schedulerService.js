@@ -377,6 +377,27 @@ async function cleanupOldNotifications() {
 }
 
 /**
+ * Cleanup expired match groups older than 60 days
+ */
+async function cleanupExpiredMatchGroups() {
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+  try {
+    const result = await prisma.matchGroup.deleteMany({
+      where: {
+        status: 'expired',
+        updatedAt: { lt: sixtyDaysAgo },
+      },
+    });
+    if (result.count > 0) {
+      console.log(`[Scheduler] Cleaned up ${result.count} expired match groups`);
+    }
+  } catch (error) {
+    console.error('[Scheduler] Failed to cleanup expired match groups:', error);
+  }
+}
+
+/**
  * Run all scheduled tasks
  */
 async function runScheduledTasks() {
@@ -390,6 +411,7 @@ async function runScheduledTasks() {
     await sendApprovalReminders();
     await autoCompleteStaleTransactions();
     await cleanupOldNotifications();
+    await cleanupExpiredMatchGroups();
   } catch (error) {
     console.error('[Scheduler] Error running scheduled tasks:', error);
   }

@@ -8,12 +8,14 @@ const {
   getTransaction,
   getMyTransactions,
   updateTransactionStatus,
+  updateProtectionType,
   disputeTransaction,
   respondToDispute,
   resolveDispute,
+  getTransactionAuditLog,
 } = require('../controllers/transactionController');
 const { sendMessage, getMessages } = require('../controllers/messageController');
-const { submitRating, getTransactionRatings } = require('../controllers/ratingController');
+const { submitRating, getTransactionRatings, updateRating, deleteRating } = require('../controllers/ratingController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -135,6 +137,20 @@ router.post(
   ],
   handleValidationErrors,
   asyncHandler(createTransaction)
+);
+
+// PATCH /api/transactions/:id/protection (lender updates protection type)
+router.patch(
+  '/:id/protection',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
+    body('protectionType')
+      .isIn(PROTECTION_TYPES)
+      .withMessage('Invalid protection type'),
+  ],
+  handleValidationErrors,
+  asyncHandler(updateProtectionType)
 );
 
 // GET /api/transactions/:id
@@ -272,6 +288,39 @@ router.post(
   ],
   handleValidationErrors,
   asyncHandler(submitRating)
+);
+
+// PUT /api/transactions/:id/rating (edit within 24h)
+router.put(
+  '/:id/rating',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Invalid transaction ID'),
+    body('overallRating')
+      .optional()
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Overall rating must be 1-5'),
+  ],
+  handleValidationErrors,
+  asyncHandler(updateRating)
+);
+
+// DELETE /api/transactions/:id/rating (delete within 24h)
+router.delete(
+  '/:id/rating',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid transaction ID')],
+  handleValidationErrors,
+  asyncHandler(deleteRating)
+);
+
+// GET /api/transactions/:id/audit-log
+router.get(
+  '/:id/audit-log',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid transaction ID')],
+  handleValidationErrors,
+  asyncHandler(getTransactionAuditLog)
 );
 
 // GET /api/transactions/:id/ratings

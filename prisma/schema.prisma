@@ -270,6 +270,8 @@ model Request {
   longitude       Decimal       @db.Decimal(11, 8)
   status          RequestStatus @default(open)
   expiresAt       DateTime      @map("expires_at")
+  minCondition    ItemCondition? @map("min_condition")
+  requiredProtection ProtectionPreference? @map("required_protection")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 

@@ -223,7 +223,7 @@ async function getTransaction(req, res) {
       transactionItems: {
         include: {
           item: {
-            select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+            select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
           },
         },
         orderBy: { createdAt: 'asc' },
@@ -286,7 +286,7 @@ async function getMyTransactions(req, res) {
         transactionItems: {
           include: {
             item: {
-              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
             },
           },
           orderBy: { createdAt: 'asc' },
@@ -317,6 +317,12 @@ async function updateTransactionStatus(req, res) {
   const { id } = req.params;
   const { status, disputeReason } = req.body;
 
+  // Validate status against known values
+  const validStatuses = Object.keys(VALID_TRANSITIONS);
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: `Invalid status: ${status}. Valid statuses: ${validStatuses.join(', ')}` });
+  }
+
   const transaction = await prisma.transaction.findUnique({
     where: { id },
     include: { item: true },
@@ -345,8 +351,8 @@ async function updateTransactionStatus(req, res) {
     return res.status(403).json({ error: 'Only the lender can accept the transaction' });
   }
 
-  if (status === 'pickup_confirmed' && transaction.borrowerId !== req.user.id) {
-    return res.status(403).json({ error: 'Only the borrower can confirm pickup' });
+  if (status === 'pickup_confirmed' && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the lender can confirm pickup' });
   }
 
   if (status === 'return_initiated' && transaction.borrowerId !== req.user.id) {
@@ -717,6 +723,11 @@ async function resolveDispute(req, res) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
+  // Prevent the dispute filer from resolving their own dispute
+  if (transaction.disputeFiledBy === req.user.id) {
+    return res.status(400).json({ error: 'The dispute filer cannot resolve their own dispute' });
+  }
+
   const updatedTransaction = await prisma.transaction.update({
     where: { id },
     data: {
@@ -779,11 +790,14 @@ async function createBundleTransaction(req, res) {
     return res.status(400).json({ error: 'Pickup time must be before return time' });
   }
 
-  // Fetch bundle with its items
+  // Fetch bundle with its items via bundleItems relation
   const bundle = await prisma.bundle.findUnique({
     where: { id: bundleId },
     include: {
-      items: { include: { owner: true } },
+      bundleItems: {
+        where: { itemId: { not: null } },
+        include: { item: { include: { owner: true } } },
+      },
     },
   });
 
@@ -791,7 +805,7 @@ async function createBundleTransaction(req, res) {
     return res.status(404).json({ error: 'Bundle not found' });
   }
 
-  const items = bundle.items;
+  const items = bundle.bundleItems.map(bi => bi.item).filter(Boolean);
   if (items.length === 0) {
     return res.status(400).json({ error: 'Bundle has no items' });
   }
@@ -899,7 +913,7 @@ async function createBundleTransaction(req, res) {
         transactionItems: {
           include: {
             item: {
-              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
             },
           },
           orderBy: { createdAt: 'asc' },
@@ -1128,7 +1142,7 @@ async function createBundleRequestTransaction(req, res) {
         transactionItems: {
           include: {
             item: {
-              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
             },
           },
           orderBy: { createdAt: 'asc' },
@@ -1244,7 +1258,12 @@ async function createMatchGroupTransaction(req, res) {
     });
   }
 
-  const items = matches.map(m => m.item);
+  // Deduplicate items — the same item can appear in multiple matches (matched to different requests)
+  const itemMap = new Map();
+  for (const m of matches) {
+    if (!itemMap.has(m.item.id)) itemMap.set(m.item.id, m.item);
+  }
+  const uniqueItems = [...itemMap.values()];
   const ownerId = matchGroup.lenderId;
 
   const transaction = await prisma.$transaction(async (tx) => {
@@ -1268,8 +1287,8 @@ async function createMatchGroupTransaction(req, res) {
       });
     }
 
-    // Date conflict check for each item
-    for (const item of items) {
+    // Date conflict check for each unique item
+    for (const item of uniqueItems) {
       const conflict = await hasDateConflict(item.id, pickupTime, returnTime, null, tx);
       if (conflict.hasConflict) {
         const err = new Error(`"${item.title}" is already booked during the requested dates`);
@@ -1285,10 +1304,10 @@ async function createMatchGroupTransaction(req, res) {
       }
     }
 
-    // Calculate fees for each item
-    const ownerState = items[0].owner.state;
+    // Calculate fees for each unique item (not per-match, to avoid double-counting)
+    const ownerState = uniqueItems[0].owner.state;
     const taxRate = getTaxRate(ownerState);
-    const itemFees = items.map(item => ({
+    const itemFees = uniqueItems.map(item => ({
       item,
       fees: calculateFees(item, pickupTime, returnTime, protectionType, taxRate),
     }));
@@ -1301,7 +1320,7 @@ async function createMatchGroupTransaction(req, res) {
     const totalInsuranceFee = itemFees.reduce((sum, f) => sum + (f.fees.insuranceFee || 0), 0);
     const totalCharged = itemFees.reduce((sum, f) => sum + f.fees.totalCharged, 0);
 
-    const primaryItemId = items[0].id;
+    const primaryItemId = uniqueItems[0].id;
 
     // Create the transaction
     const txn = await tx.transaction.create({
@@ -1362,7 +1381,7 @@ async function createMatchGroupTransaction(req, res) {
         transactionItems: {
           include: {
             item: {
-              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true },
+              select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
             },
           },
           orderBy: { createdAt: 'asc' },
@@ -1390,7 +1409,7 @@ async function createMatchGroupTransaction(req, res) {
       fromStatus: null,
       toStatus: 'requested',
       action: 'created',
-      metadata: { matchGroupId, itemCount: items.length, type: 'match_group' },
+      metadata: { matchGroupId, itemCount: uniqueItems.length, type: 'match_group' },
     },
   }).catch(err => console.error('[AuditLog] Failed to log match group transaction creation:', err.message));
 
@@ -1398,13 +1417,170 @@ async function createMatchGroupTransaction(req, res) {
   const borrowerFullName = [transaction.borrower.firstName, transaction.borrower.lastName].filter(Boolean).join(' ');
   await notifyUser(ownerId, 'transaction_requested', {
     transactionId: transaction.id,
-    itemId: items[0].id,
-    itemTitle: `Multi-item (${items.length} items)`,
+    itemId: uniqueItems[0].id,
+    itemTitle: `Multi-item (${uniqueItems.length} items)`,
     borrowerId: req.user.id,
     borrowerName: borrowerFullName,
   });
 
   res.status(201).json(transaction);
+}
+
+/**
+ * Get audit log for a transaction
+ * GET /api/transactions/:id/audit-log
+ */
+async function getTransactionAuditLog(req, res) {
+  const { id } = req.params;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    select: { borrowerId: true, lenderId: true },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+
+  if (transaction.borrowerId !== req.user.id && transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to view this audit log' });
+  }
+
+  const auditLog = await prisma.transactionAuditLog.findMany({
+    where: { transactionId: id },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      user: {
+        select: { id: true, firstName: true, lastName: true },
+      },
+    },
+  });
+
+  res.json({ auditLog });
+}
+
+/**
+ * Lender updates protection type on a requested transaction
+ * PATCH /api/transactions/:id/protection
+ */
+async function updateProtectionType(req, res) {
+  const { id } = req.params;
+  const { protectionType } = req.body;
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: { include: { owner: true } },
+      transactionItems: { include: { item: true } },
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  if (!transaction) {
+    return res.status(404).json({ error: 'Transaction not found' });
+  }
+  if (transaction.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Only the lender can update protection type' });
+  }
+  if (transaction.status !== 'requested') {
+    return res.status(400).json({ error: 'Protection type can only be changed on requested transactions' });
+  }
+  if (transaction.protectionType === protectionType) {
+    return res.status(400).json({ error: 'Protection type is already set to this value' });
+  }
+
+  // Recalculate fees with new protection type
+  const ownerState = transaction.item.owner.state;
+  const taxRate = getTaxRate(ownerState);
+
+  if (transaction.transactionItems && transaction.transactionItems.length > 0) {
+    // Multi-item transaction: recalculate per-item and totals
+    const itemFees = transaction.transactionItems.map(ti => ({
+      ti,
+      fees: calculateFees(ti.item, transaction.pickupTime, transaction.returnTime, protectionType, taxRate),
+    }));
+
+    const totalRentalFee = itemFees.reduce((sum, f) => sum + f.fees.rentalFee, 0);
+    const totalPlatformFee = itemFees.reduce((sum, f) => sum + f.fees.platformFee, 0);
+    const totalTaxAmount = itemFees.reduce((sum, f) => sum + f.fees.taxAmount, 0);
+    const totalDepositAmount = itemFees.reduce((sum, f) => sum + (f.fees.depositAmount || 0), 0);
+    const totalInsuranceFee = itemFees.reduce((sum, f) => sum + (f.fees.insuranceFee || 0), 0);
+    const totalCharged = itemFees.reduce((sum, f) => sum + f.fees.totalCharged, 0);
+
+    await prisma.$transaction(async (tx) => {
+      // Update each TransactionItem's fees
+      for (const { ti, fees } of itemFees) {
+        await tx.transactionItem.update({
+          where: { id: ti.id },
+          data: {
+            depositAmount: fees.depositAmount,
+            insuranceFee: fees.insuranceFee,
+          },
+        });
+      }
+      // Update the transaction totals
+      await tx.transaction.update({
+        where: { id },
+        data: {
+          protectionType,
+          depositAmount: totalDepositAmount > 0 ? parseFloat(totalDepositAmount.toFixed(2)) : null,
+          insuranceFee: totalInsuranceFee > 0 ? parseFloat(totalInsuranceFee.toFixed(2)) : null,
+          totalCharged: parseFloat(totalCharged.toFixed(2)),
+        },
+      });
+    });
+  } else {
+    // Single-item transaction
+    const fees = calculateFees(transaction.item, transaction.pickupTime, transaction.returnTime, protectionType, taxRate);
+    await prisma.transaction.update({
+      where: { id },
+      data: {
+        protectionType,
+        depositAmount: fees.depositAmount,
+        insuranceFee: fees.insuranceFee,
+        totalCharged: parseFloat(fees.totalCharged.toFixed(2)),
+      },
+    });
+  }
+
+  // Notify borrower about the change
+  const lenderName = [req.user.firstName, req.user.lastName].filter(Boolean).join(' ');
+  await notifyUser(transaction.borrowerId, 'protection_updated', {
+    transactionId: id,
+    itemId: transaction.itemId,
+    itemTitle: transaction.transactionItems?.length > 0
+      ? `Bundle (${transaction.transactionItems.length} items)`
+      : transaction.item.title,
+    lenderId: req.user.id,
+    lenderName,
+    oldProtection: transaction.protectionType,
+    newProtection: protectionType,
+  });
+
+  console.log(`[Transaction] Lender ${req.user.id} changed protection on ${id}: ${transaction.protectionType} → ${protectionType}`);
+
+  // Re-fetch full transaction
+  const updated = await prisma.transaction.findUnique({
+    where: { id },
+    include: {
+      item: true,
+      borrower: { select: { id: true, firstName: true, lastName: true, phoneNumber: true, profilePhotoUrl: true } },
+      lender: { select: { id: true, firstName: true, lastName: true, phoneNumber: true, profilePhotoUrl: true } },
+      photos: true,
+      ratings: true,
+      request: true,
+      transactionItems: {
+        include: {
+          item: {
+            select: { id: true, title: true, photoUrls: true, listingType: true, pricingType: true, priceAmount: true, lateFeeAmount: true, categoryTier1: true, categoryTier2: true },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  });
+
+  res.json(updated);
 }
 
 module.exports = {
@@ -1415,7 +1591,9 @@ module.exports = {
   getTransaction,
   getMyTransactions,
   updateTransactionStatus,
+  updateProtectionType,
   disputeTransaction,
   respondToDispute,
   resolveDispute,
+  getTransactionAuditLog,
 };

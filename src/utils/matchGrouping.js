@@ -1,7 +1,11 @@
 const prisma = require('../config/database');
 
+// In-process debounce: prevents concurrent refreshes for the same borrower
+const pendingRefreshes = new Map();
+
 /**
  * Refresh MatchGroup records for a given borrower.
+ * Deduplicates concurrent calls for the same borrowerId.
  *
  * Algorithm:
  * 1. Query all active (non-declined) matches for the borrower's open/matched/accepted requests
@@ -14,7 +18,21 @@ const prisma = require('../config/database');
  *
  * @param {string} borrowerId - UUID of the borrower (requester)
  */
-async function refreshMatchGroups(borrowerId) {
+function refreshMatchGroups(borrowerId) {
+  // If a refresh is already in progress for this borrower, return the existing promise
+  if (pendingRefreshes.has(borrowerId)) {
+    return pendingRefreshes.get(borrowerId);
+  }
+
+  const promise = _refreshMatchGroupsImpl(borrowerId).finally(() => {
+    pendingRefreshes.delete(borrowerId);
+  });
+
+  pendingRefreshes.set(borrowerId, promise);
+  return promise;
+}
+
+async function _refreshMatchGroupsImpl(borrowerId) {
   // 1. Fetch all active matches for this borrower's open/matched/accepted requests
   const matches = await prisma.match.findMany({
     where: {

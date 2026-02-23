@@ -5,6 +5,44 @@ const { getSpecsForItem } = require('./specUtils');
 const { getItemIdsWithConflicts, hasDateConflict, isAvailableForDates } = require('./dateConflict');
 const { refreshMatchGroups } = require('./matchGrouping');
 
+// Condition ranking for minCondition filter (higher = better)
+const CONDITION_RANK = { poor: 0, fair: 1, good: 2, excellent: 3, new: 4 };
+
+// Protection compatibility: which item protection preferences satisfy a request's required protection
+const PROTECTION_COMPATIBLE = {
+  deposit_required: new Set(['deposit_required', 'let_me_decide']),
+  insurance_required: new Set(['insurance_required', 'let_me_decide']),
+  // waiver_ok and let_me_decide are flexible — any item is fine
+};
+
+/**
+ * Check if an item meets a request's minCondition requirement
+ * @param {string|null} itemCondition - The item's condition
+ * @param {string|null} requestMinCondition - The request's minimum condition
+ * @returns {boolean} true if the item meets or exceeds the requirement
+ */
+function meetsMinCondition(itemCondition, requestMinCondition) {
+  if (!requestMinCondition) return true; // No requirement
+  if (!itemCondition) return false; // Item has no condition data
+  const itemRank = CONDITION_RANK[itemCondition] ?? -1;
+  const minRank = CONDITION_RANK[requestMinCondition] ?? -1;
+  return itemRank >= minRank;
+}
+
+/**
+ * Check if an item's protection preference is compatible with a request's required protection
+ * @param {string|null} itemProtection - The item's protectionPreference
+ * @param {string|null} requestProtection - The request's requiredProtection
+ * @returns {boolean} true if compatible
+ */
+function meetsProtectionRequirement(itemProtection, requestProtection) {
+  if (!requestProtection || requestProtection === 'waiver_ok' || requestProtection === 'let_me_decide') return true;
+  if (!itemProtection) return false;
+  const compatibleSet = PROTECTION_COMPATIBLE[requestProtection];
+  if (!compatibleSet) return true; // Unknown requirement, allow
+  return compatibleSet.has(itemProtection);
+}
+
 /**
  * Extract keywords from text (removes common stop words)
  * @param {string} text - Text to extract keywords from
@@ -320,7 +358,7 @@ async function findMatchesForRequest(requestId) {
     conflictedItemIds = await getItemIdsWithConflicts(allItemIds, request.neededFrom, request.neededUntil);
   }
 
-  const matches = [];
+  let matches = [];
 
   for (const item of items) {
     // Skip items with date conflicts
@@ -371,6 +409,16 @@ async function findMatchesForRequest(requestId) {
       continue; // Hard exclude: required spec didn't match
     }
 
+    // Hard filter: minCondition — skip items below the request's minimum condition
+    if (!meetsMinCondition(item.condition, request.minCondition)) {
+      continue;
+    }
+
+    // Hard filter: requiredProtection — skip items with incompatible protection
+    if (!meetsProtectionRequirement(item.protectionPreference, request.requiredProtection)) {
+      continue;
+    }
+
     // Calculate text relevance
     const { score: textRelevance, titleMatch } = calculateTextRelevance(request, item);
 
@@ -405,10 +453,17 @@ async function findMatchesForRequest(requestId) {
     });
   }
 
+  // Sort by score descending and cap at 20 matches per request
+  matches.sort((a, b) => b.matchScore - a.matchScore);
+  if (matches.length > 20) {
+    matches = matches.slice(0, 20);
+  }
+
   // Create all matches in database
   if (matches.length > 0) {
     await prisma.match.createMany({
       data: matches,
+      skipDuplicates: true,
     });
 
     // Update request status to matched
@@ -807,6 +862,15 @@ async function findRequestsForItem(itemId) {
       continue;
     }
 
+    // Hard filter: minCondition — skip requests where item doesn't meet minimum condition
+    if (!meetsMinCondition(item.condition, request.minCondition)) {
+      continue;
+    }
+    // Hard filter: requiredProtection — skip requests where item has incompatible protection
+    if (!meetsProtectionRequirement(item.protectionPreference, request.requiredProtection)) {
+      continue;
+    }
+
     // Calculate text relevance
     const { score: textRelevance, titleMatch } = calculateTextRelevance(request, item);
 
@@ -847,6 +911,7 @@ async function findRequestsForItem(itemId) {
   // Create all new matches in database
   await prisma.match.createMany({
     data: newMatches,
+    skipDuplicates: true,
   });
 
   // Update any 'open' requests to 'matched'

@@ -33,9 +33,12 @@ async function register(req, res) {
     return res.status(400).json({ error: 'First name and last name are required' });
   }
 
+  // Normalize email to lowercase
+  const normalizedEmail = email.trim().toLowerCase();
+
   // Check if email already exists
   const existingUser = await prisma.user.findUnique({
-    where: { email },
+    where: { email: normalizedEmail },
   });
 
   if (existingUser) {
@@ -59,7 +62,7 @@ async function register(req, res) {
   // Create user
   const user = await prisma.user.create({
     data: {
-      email,
+      email: normalizedEmail,
       passwordHash,
       firstName,
       middleName: middleName || null,
@@ -112,9 +115,9 @@ async function register(req, res) {
 async function login(req, res) {
   const { email, password } = req.body;
 
-  // Find user by email
+  // Find user by email (normalize to lowercase)
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { email: email.trim().toLowerCase() },
   });
 
   if (!user) {

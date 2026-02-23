@@ -16,7 +16,8 @@ const BLOCKING_STATUSES = ['requested', 'accepted', 'pickup_confirmed', 'active'
  * @param {string} [excludeTransactionId] - Optional transaction ID to exclude (for edits)
  * @returns {Promise<{hasConflict: boolean, conflictingTransaction: object|null}>}
  */
-async function hasDateConflict(itemId, pickupTime, returnTime, excludeTransactionId) {
+async function hasDateConflict(itemId, pickupTime, returnTime, excludeTransactionId, client) {
+  const db = client || prisma;
   const where = {
     itemId,
     status: { in: BLOCKING_STATUSES },
@@ -28,7 +29,7 @@ async function hasDateConflict(itemId, pickupTime, returnTime, excludeTransactio
     where.id = { not: excludeTransactionId };
   }
 
-  const conflicting = await prisma.transaction.findFirst({
+  const conflicting = await db.transaction.findFirst({
     where,
     select: {
       id: true,

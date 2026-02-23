@@ -28,6 +28,9 @@ async function createRequest(req, res) {
     customNeed,
     // Specs/details
     details,
+    // Condition/protection preferences
+    minCondition,
+    requiredProtection,
     // Bundle support
     bundleId,
     isBundleLeader,
@@ -93,6 +96,8 @@ async function createRequest(req, res) {
       isOther: isOther || false,
       customNeed: customNeed || null,
       details: details || {},
+      minCondition: minCondition || null,
+      requiredProtection: requiredProtection || null,
       bundleId: resolvedBundleId,
     },
     include: {
@@ -160,10 +165,10 @@ async function getRequest(req, res) {
     });
   }
 
-  // Non-owners can only see basic request info (no matches, no location details)
+  // Non-owners can only see basic request info (no matches, no location, no budget)
   const isOwner = request.requesterId === req.user.id;
   if (!isOwner) {
-    const { matches, latitude, longitude, maxDistanceMiles, ...safeRequest } = request;
+    const { matches, latitude, longitude, maxDistanceMiles, neededFrom, neededUntil, maxBudget, ...safeRequest } = request;
     return res.json({ ...safeRequest, bundleSiblings });
   }
 
@@ -210,7 +215,63 @@ async function getRequest(req, res) {
     }
   }
 
-  res.json({ ...request, bundleSiblings });
+  // For owner view: add transactionHistory and tentativePeriods
+  const now = new Date();
+
+  // Transaction history: all transactions for this request with item/lender info
+  const transactionHistory = await prisma.transaction.findMany({
+    where: { requestId: id },
+    select: {
+      id: true, status: true, pickupTime: true, returnTime: true,
+      rentalFee: true, createdAt: true,
+      item: { select: { id: true, title: true } },
+      lender: { select: { id: true, firstName: true, lastName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const formattedTransactionHistory = transactionHistory.map(t => ({
+    id: t.id,
+    status: t.status,
+    pickupTime: t.pickupTime,
+    returnTime: t.returnTime,
+    rentalFee: t.rentalFee,
+    createdAt: t.createdAt,
+    itemTitle: t.item?.title,
+    itemId: t.item?.id,
+    lenderName: `${t.lender?.firstName || ''} ${t.lender?.lastName || ''}`.trim(),
+    lenderId: t.lender?.id,
+  }));
+
+  // Tentative periods: accepted matches without transactions yet
+  const acceptedMatches = await prisma.match.findMany({
+    where: {
+      requestId: id,
+      lenderResponse: 'accepted',
+    },
+    include: {
+      item: {
+        select: { id: true, title: true, owner: { select: { id: true, firstName: true, lastName: true } } },
+      },
+      request: { select: { neededFrom: true, neededUntil: true } },
+    },
+  });
+
+  // Filter out matches that already have a transaction
+  const transactedItemIds = new Set(transactionHistory.map(t => t.item?.id).filter(Boolean));
+  const tentativePeriods = acceptedMatches
+    .filter(m => !transactedItemIds.has(m.item?.id) && m.request?.neededUntil && new Date(m.request.neededUntil) > now)
+    .map(m => ({
+      matchId: m.id,
+      itemId: m.item?.id,
+      itemTitle: m.item?.title,
+      neededFrom: m.request?.neededFrom,
+      neededUntil: m.request?.neededUntil,
+      lenderName: `${m.item?.owner?.firstName || ''} ${m.item?.owner?.lastName || ''}`.trim(),
+      matchScore: m.matchScore,
+    }));
+
+  res.json({ ...request, bundleSiblings, transactionHistory: formattedTransactionHistory, tentativePeriods });
 }
 
 /**
@@ -368,6 +429,11 @@ async function getRequestMatches(req, res) {
     return res.status(404).json({ error: 'Request not found' });
   }
 
+  // Only the request owner can view matches
+  if (request.requesterId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to view matches for this request' });
+  }
+
   const matches = await prisma.match.findMany({
     where: { requestId: id },
     include: {
@@ -437,6 +503,10 @@ async function browseRequests(req, res) {
     neededFrom,
     neededUntil,
     status,
+    sortBy,
+    sortOrder,
+    minBudget,
+    maxBudget,
     limit = 20,
     offset = 0,
   } = req.query;
@@ -487,6 +557,23 @@ async function browseRequests(req, res) {
     });
   }
 
+  // Budget range filter on maxBudget field
+  if (minBudget) {
+    where.maxBudget = { ...(where.maxBudget || {}), gte: parseFloat(minBudget) };
+  }
+  if (maxBudget) {
+    where.maxBudget = { ...(where.maxBudget || {}), lte: parseFloat(maxBudget) };
+  }
+
+  // Dynamic sort
+  const sortFieldMap = { createdAt: 'createdAt', maxBudget: 'maxBudget', title: 'title' };
+  const prismaField = sortFieldMap[sortBy] || 'createdAt';
+  const prismaOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+  // For maxBudget sort, push nulls last
+  const orderBy = prismaField === 'maxBudget'
+    ? [{ maxBudget: { sort: prismaOrder, nulls: 'last' } }]
+    : { [prismaField]: prismaOrder };
+
   const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
   const parsedOffset = Math.max(parseInt(offset) || 0, 0);
   const hasDistanceFilter = latitude && longitude;
@@ -494,7 +581,13 @@ async function browseRequests(req, res) {
   // Over-fetch when distance filtering to compensate for post-query filtering
   const fetchLimit = hasDistanceFilter ? parsedLimit * 3 : parsedLimit;
 
-  const [requests, total] = await Promise.all([
+  // Category counts: group by tier1, using a WHERE that strips category tier filters
+  const countWhere = { ...where };
+  delete countWhere.categoryTier1;
+  delete countWhere.categoryTier2;
+  delete countWhere.categoryTier3;
+
+  const [requests, total, categoryCounts] = await Promise.all([
     prisma.request.findMany({
       where,
       include: {
@@ -513,11 +606,17 @@ async function browseRequests(req, res) {
         },
         _count: { select: { matches: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       take: fetchLimit,
       skip: parsedOffset,
     }),
     prisma.request.count({ where }),
+    prisma.request.groupBy({
+      by: ['categoryTier1'],
+      where: countWhere,
+      _count: { categoryTier1: true },
+      orderBy: { _count: { categoryTier1: 'desc' } },
+    }),
   ]);
 
   // Calculate distance if coordinates provided
@@ -566,6 +665,9 @@ async function browseRequests(req, res) {
       limit: parsedLimit,
       offset: parsedOffset,
     },
+    categoryCounts: categoryCounts
+      .filter(c => c.categoryTier1)
+      .map(c => ({ categoryTier1: c.categoryTier1, count: c._count.categoryTier1 })),
   });
 }
 
@@ -604,6 +706,9 @@ async function updateRequest(req, res) {
     isOther,
     customNeed,
     details,
+    minCondition,
+    requiredProtection,
+    bundleId,
   } = req.body;
 
   // Build update data — only include fields that were provided
@@ -621,6 +726,9 @@ async function updateRequest(req, res) {
   if (isOther !== undefined) data.isOther = isOther;
   if (customNeed !== undefined) data.customNeed = customNeed;
   if (details !== undefined) data.details = details;
+  if (minCondition !== undefined) data.minCondition = minCondition || null;
+  if (requiredProtection !== undefined) data.requiredProtection = requiredProtection || null;
+  if (bundleId !== undefined) data.bundleId = bundleId || null;
   // Map tier1 to legacy category if category changed
   if (categoryTier1 !== undefined) {
     const TIER1_TO_LEGACY = {

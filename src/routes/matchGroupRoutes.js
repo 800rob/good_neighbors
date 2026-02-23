@@ -4,6 +4,8 @@ const {
   getBorrowerMatchGroups,
   getLenderMatchGroups,
   respondToMatchGroup,
+  refreshUserMatchGroups,
+  getMatchGroup,
 } = require('../controllers/matchGroupController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate } = require('../middleware/authMiddleware');
@@ -16,6 +18,18 @@ router.get('/borrower', authenticate, asyncHandler(getBorrowerMatchGroups));
 
 // GET /api/match-groups/lender
 router.get('/lender', authenticate, asyncHandler(getLenderMatchGroups));
+
+// POST /api/match-groups/refresh
+router.post('/refresh', authenticate, asyncHandler(refreshUserMatchGroups));
+
+// GET /api/match-groups/:id
+router.get(
+  '/:id',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid match group ID')],
+  handleValidationErrors,
+  asyncHandler(getMatchGroup)
+);
 
 // POST /api/match-groups/:id/respond
 router.post(

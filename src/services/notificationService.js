@@ -107,6 +107,58 @@ const NOTIFICATION_TYPES = {
     defaultEmail: true,
     defaultSms: false,
   },
+  bundle_responded: {
+    defaultInApp: true,
+    defaultEmail: true,
+    defaultSms: false,
+  },
+};
+
+// Consolidation config for notification types that should be grouped together.
+// When multiple unread notifications of the same group exist, they are merged
+// into a single notification with an incremented count and refreshed timestamp.
+const CONSOLIDATION_CONFIG = {
+  match_created: {
+    groupKey: () => '',
+    getTitle: (count) => 'New Matches Found',
+    getMessage: (count) =>
+      `${count} new matches found for your items. Review them now.`,
+  },
+  match_found: {
+    groupKey: () => '',
+    getTitle: (count) => 'Matches Found for Your Requests',
+    getMessage: (count) =>
+      `${count} of your requests have new matches. Review them now.`,
+  },
+  match_accepted: {
+    groupKey: () => '',
+    getTitle: (count) => 'Matches Accepted',
+    getMessage: (count) =>
+      `${count} matches were accepted. You can start transactions.`,
+  },
+  match_declined: {
+    groupKey: () => '',
+    getTitle: (count) => 'Matches Declined',
+    getMessage: (count) => `${count} matches were declined.`,
+  },
+  message_received: {
+    groupKey: (context) => context.transactionId || '',
+    getTitle: (count) => 'New Messages',
+    getMessage: (count, context) =>
+      `${count} new messages from ${context.senderName} about "${context.itemTitle}".`,
+  },
+  transaction_requested: {
+    groupKey: () => '',
+    getTitle: (count) => 'New Borrow Requests',
+    getMessage: (count) =>
+      `${count} new borrow requests for your items.`,
+  },
+  approval_reminder: {
+    groupKey: () => '',
+    getTitle: (count) => 'Pending Requests',
+    getMessage: (count) =>
+      `You have ${count} pending requests awaiting your response.`,
+  },
 };
 
 /**
@@ -203,6 +255,14 @@ function getNotificationContent(type, context) {
     approval_reminder: {
       title: 'Pending Borrow Request',
       message: `${context.borrowerName} is waiting for your response on "${context.itemTitle}". Please accept or decline the request.`,
+    },
+    bundle_responded: {
+      title: 'Bundle Response',
+      message: context.declinedCount === 0
+        ? `${context.lenderName} accepted all ${context.totalCount} items in your bundle request.`
+        : context.acceptedCount === 0
+          ? `${context.lenderName} declined all ${context.totalCount} items in your bundle request.`
+          : `${context.lenderName} accepted ${context.acceptedCount} of ${context.totalCount} items in your bundle request.`,
     },
   };
 
@@ -310,9 +370,50 @@ async function notifyUser(userId, type, context) {
     type,
   };
 
-  // Send in-app notification
+  // Send in-app notification (with consolidation for supported types)
   if (preferences.inAppEnabled) {
-    results.inApp = await createNotification(userId, type, title, message, data);
+    const consolidation = CONSOLIDATION_CONFIG[type];
+
+    if (consolidation) {
+      const consolidationKey = consolidation.groupKey(context);
+
+      // Look for an existing unread notification in the same consolidation group
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId,
+          type,
+          isRead: false,
+          data: { path: ['consolidationKey'], equals: consolidationKey },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (existing) {
+        const newCount = ((existing.data && existing.data.consolidatedCount) || 1) + 1;
+        results.inApp = await prisma.notification.update({
+          where: { id: existing.id },
+          data: {
+            title: consolidation.getTitle(newCount),
+            message: consolidation.getMessage(newCount, context),
+            createdAt: new Date(),
+            data: {
+              ...context,
+              type,
+              consolidationKey,
+              consolidatedCount: newCount,
+            },
+          },
+        });
+      } else {
+        results.inApp = await createNotification(userId, type, title, message, {
+          ...data,
+          consolidationKey,
+          consolidatedCount: 1,
+        });
+      }
+    } else {
+      results.inApp = await createNotification(userId, type, title, message, data);
+    }
   }
 
   // Send email notification
@@ -364,6 +465,7 @@ function getNotificationTypeDescription(type) {
     request_expired: 'Your request has expired',
     request_expiring: '24-hour reminder before request expires',
     approval_reminder: 'Reminder to respond to pending borrow requests',
+    bundle_responded: 'Lender responded to your bundle request',
   };
   return descriptions[type] || type;
 }

@@ -300,6 +300,19 @@ async function getItems(req, res) {
 
   const total = await prisma.item.count({ where });
 
+  // Category counts: group by tier1, using a WHERE that strips category tier filters
+  // so all categories are counted even when one is selected
+  const countWhere = { ...where };
+  delete countWhere.categoryTier1;
+  delete countWhere.categoryTier2;
+  delete countWhere.categoryTier3;
+  const categoryCounts = await prisma.item.groupBy({
+    by: ['categoryTier1'],
+    where: countWhere,
+    _count: { categoryTier1: true },
+    orderBy: { _count: { categoryTier1: 'desc' } },
+  });
+
   // Annotate with isFavorited for authenticated users
   if (req.user?.id) {
     const itemIds = items.map(i => i.id);
@@ -320,6 +333,9 @@ async function getItems(req, res) {
       limit: parsedLimit,
       offset: parsedOffset,
     },
+    categoryCounts: categoryCounts
+      .filter(c => c.categoryTier1)
+      .map(c => ({ categoryTier1: c.categoryTier1, count: c._count.categoryTier1 })),
   });
 }
 
@@ -400,6 +416,72 @@ async function getItem(req, res) {
     });
   }
 
+  // Tentative periods: accepted matches that don't yet have a transaction
+  const now = new Date();
+  const acceptedMatches = await prisma.match.findMany({
+    where: {
+      itemId: id,
+      lenderResponse: 'accepted',
+      request: {
+        neededUntil: { gt: now },
+      },
+    },
+    include: {
+      request: {
+        select: {
+          id: true,
+          title: true,
+          neededFrom: true,
+          neededUntil: true,
+          requesterId: true,
+          requester: {
+            select: { firstName: true, lastName: true },
+          },
+          transactions: {
+            where: { itemId: id },
+            select: { id: true },
+          },
+        },
+      },
+    },
+  });
+
+  const tentativePeriods = acceptedMatches
+    .filter(m => m.request.transactions.length === 0)
+    .map(m => ({
+      matchId: m.id,
+      requestId: m.request.id,
+      requestTitle: m.request.title,
+      neededFrom: m.request.neededFrom,
+      neededUntil: m.request.neededUntil,
+      borrowerName: `${m.request.requester.firstName} ${m.request.requester.lastName}`.trim(),
+      matchScore: parseFloat(m.matchScore),
+    }));
+
+  // Transaction history (owner-only): all transactions for this item
+  let transactionHistory = undefined;
+  if (req.user?.id === item.ownerId) {
+    const allTransactions = await prisma.transaction.findMany({
+      where: { itemId: id },
+      include: {
+        borrower: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    transactionHistory = allTransactions.map(t => ({
+      id: t.id,
+      status: t.status,
+      pickupTime: t.pickupTime,
+      returnTime: t.returnTime,
+      rentalFee: t.rentalFee ? parseFloat(t.rentalFee) : 0,
+      createdAt: t.createdAt,
+      borrowerName: `${t.borrower.firstName} ${t.borrower.lastName}`.trim(),
+      borrowerId: t.borrower.id,
+    }));
+  }
+
   res.json({
     ...item,
     isFavorited,
@@ -411,6 +493,8 @@ async function getItem(req, res) {
     } : null,
     bookedPeriods,
     bundleSiblings,
+    tentativePeriods,
+    transactionHistory,
     owner: {
       ...item.owner,
       averageRating: ownerRatings._avg.overallRating
@@ -594,7 +678,46 @@ async function getMyItems(req, res) {
     prisma.item.count({ where }),
   ]);
 
-  res.json({ items, pagination: { total, limit: parsedLimit, offset: parsedOffset } });
+  // Count accepted matches without transactions per item
+  const itemIds = items.map(i => i.id);
+  const now = new Date();
+  let matchCountMap = {};
+  if (itemIds.length > 0) {
+    const acceptedMatches = await prisma.match.findMany({
+      where: {
+        itemId: { in: itemIds },
+        lenderResponse: 'accepted',
+        request: {
+          neededUntil: { gt: now },
+        },
+      },
+      include: {
+        request: {
+          select: {
+            transactions: {
+              where: { itemId: { in: itemIds } },
+              select: { itemId: true },
+            },
+          },
+        },
+      },
+    });
+
+    for (const match of acceptedMatches) {
+      // Only count if no transaction exists for this item+request combo
+      const hasTransaction = match.request.transactions.some(t => t.itemId === match.itemId);
+      if (!hasTransaction) {
+        matchCountMap[match.itemId] = (matchCountMap[match.itemId] || 0) + 1;
+      }
+    }
+  }
+
+  const itemsWithMatchCount = items.map(item => ({
+    ...item,
+    acceptedMatchCount: matchCountMap[item.id] || 0,
+  }));
+
+  res.json({ items: itemsWithMatchCount, pagination: { total, limit: parsedLimit, offset: parsedOffset } });
 }
 
 module.exports = { createItem, getItems, getItem, updateItem, deleteItem, getMyItems };

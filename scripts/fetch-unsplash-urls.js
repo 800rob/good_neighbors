@@ -33,16 +33,16 @@ const OUTPUT_PATH = path.resolve(__dirname, '../../good-neighbors-web/public/uns
 // Curated search queries optimized for good Unsplash results
 const IMAGE_MAP = {
   // Shared between seed.js and seedDemo.js
-  'miter-saw':          'miter saw woodworking',
+  'miter-saw':          'miter saw cutting wood',
   'table-saw':          'table saw woodworking workshop',
-  'party-speaker':      'bluetooth party speaker JBL',
-  'pressure-washer':    'pressure washer cleaning driveway',
-  'garage-workshop':    'garage workshop workbench tools',
+  'party-speaker':      'portable speaker music',
+  'pressure-washer':    'power washing',
+  'garage-workshop':    'workshop tools workbench',
   'camping-tent':       'camping tent outdoors forest',
   'handyman-service':   'handyman home repair tools',
 
   // seed.js only
-  'cordless-drill':     'cordless drill dewalt power tool',
+  'cordless-drill':     'electric drill tool',
   'mountain-bike':      'mountain bike trail riding',
   'folding-tables':     'folding tables event setup',
   'lawn-mower':         'lawn mower grass cutting',
@@ -52,27 +52,27 @@ const IMAGE_MAP = {
   'party-decorations':  'party decorations balloons streamers',
 
   // seedDemo.js only
-  'alpine-skis-rossignol': 'alpine skis mountain resort',
+  'alpine-skis-rossignol': 'alpine skiing downhill',
   'alpine-skis-powder':    'powder skis deep snow skiing',
-  'ski-boots-salomon':     'ski boots alpine skiing',
-  'ski-boots-nordica':     'ski boots performance alpine',
-  'snowboard-burton':      'snowboard all mountain winter',
-  'snowboard-ride':        'freestyle snowboard park',
-  'snowshoes':             'snowshoes winter hiking trail',
+  'ski-boots-salomon':     'ski boots',
+  'ski-boots-nordica':     'ski equipment boots',
+  'snowboard-burton':      'snowboard winter',
+  'snowboard-ride':        'snowboarding freestyle',
+  'snowshoes':             'snowshoes snow hiking',
   'circular-saw':          'circular saw cordless cutting wood',
   'extension-ladder':      'extension ladder fiberglass tall',
-  'bounce-house':          'bounce house inflatable kids party',
-  'projector-screen':      'projector screen outdoor movie night',
+  'bounce-house':          'inflatable bounce house',
+  'projector-screen':      'outdoor movie projector',
   'pickup-truck-ford':     'ford f250 pickup truck',
-  'pickup-truck-toyota':   'toyota tacoma pickup truck',
+  'pickup-truck-toyota':   'pickup truck',
   'dslr-camera':           'canon dslr camera lens photography',
   'generator':             'portable generator honda camping',
   'moving-help':           'moving helpers carrying furniture truck',
-  'snow-removal':          'snow removal shoveling driveway winter',
+  'snow-removal':          'snow shoveling winter',
   'house-cleaning':        'house cleaning service supplies',
   'pet-sitting':           'pet sitting dog golden retriever happy',
   'portrait-photography':  'portrait photography natural light outdoor',
-  'furniture-assembly':    'furniture assembly ikea tools',
+  'furniture-assembly':    'woodworking assembly furniture',
 };
 
 const RATE_LIMIT = 50;

@@ -177,4 +177,83 @@ async function getTransactionRatings(req, res) {
   res.json({ ratings });
 }
 
-module.exports = { submitRating, getTransactionRatings };
+/**
+ * Update a rating within 24-hour grace period
+ * PUT /api/transactions/:id/rating
+ */
+async function updateRating(req, res) {
+  const { id: transactionId } = req.params;
+  const { overallRating, onTimeRating, communicationRating, conditionRating, itemAsDescribedRating, reviewText, wouldTransactAgain } = req.body;
+
+  const rating = await prisma.rating.findUnique({
+    where: {
+      unique_rating_per_transaction_per_rater: {
+        transactionId,
+        raterId: req.user.id,
+      },
+    },
+  });
+
+  if (!rating) {
+    return res.status(404).json({ error: 'Rating not found' });
+  }
+
+  // 24-hour grace period
+  const hoursSinceCreation = (Date.now() - new Date(rating.createdAt).getTime()) / (1000 * 60 * 60);
+  if (hoursSinceCreation > 24) {
+    return res.status(400).json({ error: 'Ratings can only be edited within 24 hours of submission' });
+  }
+
+  const data = {};
+  if (overallRating !== undefined) data.overallRating = overallRating;
+  if (onTimeRating !== undefined) data.onTimeRating = onTimeRating;
+  if (communicationRating !== undefined) data.communicationRating = communicationRating;
+  if (conditionRating !== undefined) data.conditionRating = conditionRating;
+  if (itemAsDescribedRating !== undefined) data.itemAsDescribedRating = itemAsDescribedRating;
+  if (reviewText !== undefined) data.reviewText = reviewText;
+  if (wouldTransactAgain !== undefined) data.wouldTransactAgain = wouldTransactAgain;
+
+  const updated = await prisma.rating.update({
+    where: { id: rating.id },
+    data,
+    include: {
+      rater: { select: { id: true, firstName: true, lastName: true } },
+      ratedUser: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+
+  res.json(updated);
+}
+
+/**
+ * Delete a rating within 24-hour grace period
+ * DELETE /api/transactions/:id/rating
+ */
+async function deleteRating(req, res) {
+  const { id: transactionId } = req.params;
+
+  const rating = await prisma.rating.findUnique({
+    where: {
+      unique_rating_per_transaction_per_rater: {
+        transactionId,
+        raterId: req.user.id,
+      },
+    },
+  });
+
+  if (!rating) {
+    return res.status(404).json({ error: 'Rating not found' });
+  }
+
+  // 24-hour grace period
+  const hoursSinceCreation = (Date.now() - new Date(rating.createdAt).getTime()) / (1000 * 60 * 60);
+  if (hoursSinceCreation > 24) {
+    return res.status(400).json({ error: 'Ratings can only be deleted within 24 hours of submission' });
+  }
+
+  await prisma.rating.delete({ where: { id: rating.id } });
+
+  res.json({ message: 'Rating deleted' });
+}
+
+module.exports = { submitRating, getTransactionRatings, updateRating, deleteRating };

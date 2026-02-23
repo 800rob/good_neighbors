@@ -11,7 +11,7 @@ async function getBorrowerMatchGroups(req, res) {
 
   const where = {
     borrowerId: req.user.id,
-    status: { not: 'expired' },
+    status: req.query.status || { not: 'expired' },
   };
 
   const [groups, total] = await Promise.all([
@@ -65,7 +65,21 @@ async function getBorrowerMatchGroups(req, res) {
       orderBy: { matchScore: 'desc' },
     });
 
-    return { ...group, matches };
+    // Find related transactions between this borrower-lender pair
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        lenderId: group.lenderId,
+        borrowerId: group.borrowerId,
+        status: { not: 'cancelled' },
+      },
+      select: {
+        id: true, status: true, createdAt: true, protectionType: true,
+        item: { select: { id: true, title: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { ...group, matches, transactions };
   }));
 
   // Filter out groups with no active matches
@@ -87,7 +101,7 @@ async function getLenderMatchGroups(req, res) {
 
   const where = {
     lenderId: req.user.id,
-    status: { not: 'expired' },
+    status: req.query.status || { not: 'expired' },
   };
 
   const [groups, total] = await Promise.all([
@@ -141,7 +155,21 @@ async function getLenderMatchGroups(req, res) {
       orderBy: { matchScore: 'desc' },
     });
 
-    return { ...group, matches };
+    // Find related transactions between this borrower-lender pair
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        lenderId: group.lenderId,
+        borrowerId: group.borrowerId,
+        status: { not: 'cancelled' },
+      },
+      select: {
+        id: true, status: true, createdAt: true, protectionType: true,
+        item: { select: { id: true, title: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { ...group, matches, transactions };
   }));
 
   // Filter out groups with no active matches
@@ -288,11 +316,87 @@ async function respondToMatchGroup(req, res) {
 
   console.log(`[MatchGroup] Lender ${req.user.id} responded to group ${id}: ${acceptedCount} accepted, ${declinedCount} declined → ${newStatus}`);
 
-  res.json({
+  // Check for unaddressed matches in this group
+  const remainingPendingMatches = await prisma.match.count({
+    where: {
+      request: { requesterId: matchGroup.borrowerId },
+      item: { ownerId: matchGroup.lenderId },
+      lenderResponse: 'pending',
+    },
+  });
+
+  const response = {
     matches: updatedMatches,
     groupStatus: newStatus,
     message: `Match group response processed: ${acceptedCount} accepted, ${declinedCount} declined`,
-  });
+  };
+
+  if (remainingPendingMatches > 0) {
+    response.warning = `${remainingPendingMatches} match${remainingPendingMatches > 1 ? 'es' : ''} in this group still pending response`;
+    response.remainingPendingCount = remainingPendingMatches;
+  }
+
+  res.json(response);
 }
 
-module.exports = { getBorrowerMatchGroups, getLenderMatchGroups, respondToMatchGroup };
+/**
+ * Manually refresh match groups for the current user
+ * POST /api/match-groups/refresh
+ */
+async function refreshUserMatchGroups(req, res) {
+  await refreshMatchGroups(req.user.id);
+  res.json({ message: 'Match groups refreshed' });
+}
+
+/**
+ * Get a single match group by ID
+ * GET /api/match-groups/:id
+ */
+async function getMatchGroup(req, res) {
+  const { id } = req.params;
+
+  const group = await prisma.matchGroup.findUnique({
+    where: { id },
+    include: {
+      borrower: {
+        select: { id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true },
+      },
+      lender: {
+        select: { id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true },
+      },
+    },
+  });
+
+  if (!group) {
+    return res.status(404).json({ error: 'Match group not found' });
+  }
+
+  // Only participants can view
+  if (group.borrowerId !== req.user.id && group.lenderId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to view this match group' });
+  }
+
+  // Fetch matches for this group
+  const matches = await prisma.match.findMany({
+    where: {
+      request: { requesterId: group.borrowerId, status: { in: ['open', 'matched', 'accepted'] } },
+      item: { ownerId: group.lenderId },
+      lenderResponse: { not: 'declined' },
+    },
+    include: {
+      item: {
+        include: {
+          owner: { select: { id: true, firstName: true, lastName: true, neighborhood: true, profilePhotoUrl: true } },
+        },
+      },
+      request: {
+        select: { id: true, title: true, status: true, neededFrom: true, neededUntil: true },
+      },
+    },
+    orderBy: { matchScore: 'desc' },
+  });
+
+  res.json({ ...group, matches });
+}
+
+module.exports = { getBorrowerMatchGroups, getLenderMatchGroups, respondToMatchGroup, refreshUserMatchGroups, getMatchGroup };

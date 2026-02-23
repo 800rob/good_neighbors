@@ -14,10 +14,18 @@ const {
   removeBundleItem,
   publishBundle,
   getBundleMatches,
+  getBundleRequests,
 } = require('../controllers/bundleController');
 const { handleValidationErrors } = require('../middleware/validation');
 const { authenticate, optionalAuth } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
+const rateLimit = require('express-rate-limit');
+
+const createBundleLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Too many bundles created, please try again later' },
+});
 
 const router = express.Router();
 
@@ -36,6 +44,7 @@ router.get('/templates/:slug', asyncHandler(getTemplateBySlug));
 router.post(
   '/',
   authenticate,
+  createBundleLimiter,
   [
     body('title').trim().notEmpty().withMessage('Title is required'),
   ],
@@ -62,6 +71,15 @@ router.get(
   [param('bundleId').isUUID().withMessage('Invalid bundle ID')],
   handleValidationErrors,
   asyncHandler(getBundleMatches)
+);
+
+// GET /api/bundles/:id/requests
+router.get(
+  '/:id/requests',
+  authenticate,
+  [param('id').isUUID().withMessage('Invalid bundle ID')],
+  handleValidationErrors,
+  asyncHandler(getBundleRequests)
 );
 
 // --- Parameterized routes ---
